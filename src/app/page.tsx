@@ -1,65 +1,319 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  DepositProvider,
+  DepositModal,
+  useDeposit,
+  CHAIN,
+} from "@particle-network/universal-deposit/react";
+import { useUniversalPay, type Recipient, type PayResult } from "@/hooks/useUniversalPay";
 
 export default function Home() {
+  const ua = useUniversalPay();
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    // Cross-chain deposits all consolidate to the user's account on Arbitrum —
+    // the same chain Universal Pay settles transfers on.
+    <DepositProvider config={{ destination: { chainId: CHAIN.ARBITRUM } }}>
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-5 py-8">
+        <Header />
+        {ua.status === "loading" && <Skeleton />}
+        {ua.status === "idle" && (
+          <Login busy={ua.busy} error={ua.error} onLogin={ua.login} />
+        )}
+        {ua.status === "ready" && <Dashboard ua={ua} />}
+        <Footer />
+      </main>
+    </DepositProvider>
+  );
+}
+
+function Header() {
+  return (
+    <header className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <div className="grid h-9 w-9 place-items-center rounded-xl bg-indigo-600 text-lg font-bold text-white">
+          U
+        </div>
+        <h1 className="text-xl font-semibold tracking-tight">Universal Pay</h1>
+      </div>
+      <p className="text-sm text-zinc-500">
+        Pay or split with anyone — any chain, any token, one balance.
+      </p>
+    </header>
+  );
+}
+
+function Skeleton() {
+  return (
+    <div className="animate-pulse space-y-4">
+      <div className="h-28 rounded-2xl bg-zinc-200/70 dark:bg-zinc-800" />
+      <div className="h-40 rounded-2xl bg-zinc-200/70 dark:bg-zinc-800" />
+    </div>
+  );
+}
+
+function Login({
+  busy,
+  error,
+  onLogin,
+}: {
+  busy: boolean;
+  error: string | null;
+  onLogin: (email: string) => void;
+}) {
+  const [email, setEmail] = useState("");
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (email.trim()) onLogin(email.trim());
+      }}
+      className="flex flex-col gap-4 rounded-2xl border border-zinc-200 p-6 dark:border-zinc-800"
+    >
+      <div className="space-y-1">
+        <h2 className="text-lg font-medium">Sign in</h2>
+        <p className="text-sm text-zinc-500">
+          No wallet, no seed phrase. Just your email — we upgrade it into a
+          chain-abstracted account behind the scenes.
+        </p>
+      </div>
+      <input
+        type="email"
+        required
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="you@email.com"
+        className="rounded-xl border border-zinc-300 bg-transparent px-4 py-3 text-sm outline-none focus:border-indigo-500 dark:border-zinc-700"
+      />
+      <button
+        type="submit"
+        disabled={busy}
+        className="rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+      >
+        {busy ? "Setting up your account…" : "Continue with email"}
+      </button>
+      {error && <p className="text-sm text-red-500">{error}</p>}
+    </form>
+  );
+}
+
+function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
+  const [recipients, setRecipients] = useState<Recipient[]>([
+    { address: "", amount: "" },
+  ]);
+  const [result, setResult] = useState<PayResult | null>(null);
+
+  const total = recipients
+    .reduce((s, r) => s + (Number(r.amount) || 0), 0)
+    .toFixed(2);
+  const isSplit = recipients.length > 1;
+
+  function update(i: number, patch: Partial<Recipient>) {
+    setRecipients((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  }
+  function addRecipient() {
+    setRecipients((rs) => [...rs, { address: "", amount: "" }]);
+  }
+  function removeRecipient(i: number) {
+    setRecipients((rs) => rs.filter((_, idx) => idx !== i));
+  }
+
+  async function handlePay() {
+    ua.setError(null);
+    try {
+      const res = await ua.pay(recipients);
+      setResult(res);
+      setRecipients([{ address: "", amount: "" }]);
+    } catch (e) {
+      ua.setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <BalanceCard ua={ua} />
+      <DepositSection ownerAddress={ua.eoa} onCredited={ua.refreshBalance} />
+
+      <section className="flex flex-col gap-3 rounded-2xl border border-zinc-200 p-5 dark:border-zinc-800">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-medium">
+            {isSplit ? "Split a bill" : "Send money"}
+          </h2>
+          <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500 dark:bg-zinc-800">
+            settles on Arbitrum
+          </span>
+        </div>
+
+        {recipients.map((r, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input
+              value={r.address}
+              onChange={(e) => update(i, { address: e.target.value })}
+              placeholder="0x recipient address"
+              className="min-w-0 flex-1 rounded-xl border border-zinc-300 bg-transparent px-3 py-2.5 font-mono text-xs outline-none focus:border-indigo-500 dark:border-zinc-700"
+            />
+            <div className="flex items-center rounded-xl border border-zinc-300 px-2 dark:border-zinc-700">
+              <span className="text-xs text-zinc-400">$</span>
+              <input
+                value={r.amount}
+                onChange={(e) => update(i, { amount: e.target.value })}
+                inputMode="decimal"
+                placeholder="0.00"
+                className="w-16 bg-transparent px-1 py-2.5 text-right text-sm outline-none"
+              />
+            </div>
+            {recipients.length > 1 && (
+              <button
+                onClick={() => removeRecipient(i)}
+                className="text-zinc-400 hover:text-red-500"
+                aria-label="remove"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        ))}
+
+        <button
+          onClick={addRecipient}
+          className="self-start text-sm font-medium text-indigo-600 hover:text-indigo-500"
+        >
+          + Add person to split
+        </button>
+
+        <div className="mt-1 flex items-center justify-between border-t border-zinc-100 pt-3 text-sm dark:border-zinc-800">
+          <span className="text-zinc-500">
+            Total {isSplit ? `· ${recipients.length} people` : ""}
+          </span>
+          <span className="font-semibold">${total} USDC</span>
+        </div>
+
+        <button
+          onClick={handlePay}
+          disabled={ua.busy}
+          className="rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+        >
+          {ua.busy
+            ? "Sending…"
+            : isSplit
+              ? `Split $${total}`
+              : `Send $${total}`}
+        </button>
+
+        {ua.error && <p className="text-sm text-red-500">{ua.error}</p>}
+      </section>
+
+      {result && <SuccessCard result={result} onDismiss={() => setResult(null)} />}
+    </div>
+  );
+}
+
+function DepositSection({
+  ownerAddress,
+  onCredited,
+}: {
+  ownerAddress: string | null;
+  onCredited: () => void;
+}) {
+  const { isReady, recentActivity } = useDeposit({
+    ownerAddress: ownerAddress ?? undefined,
+  });
+  const [open, setOpen] = useState(false);
+
+  // Once a cross-chain deposit lands and is swept to Arbitrum, the universal
+  // balance has changed — pull the fresh number.
+  const completed = recentActivity.filter((a) => a.type === "complete").length;
+  useEffect(() => {
+    if (completed > 0) onCredited();
+  }, [completed, onCredited]);
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        disabled={!isReady}
+        className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-indigo-300 py-3 text-sm font-semibold text-indigo-600 transition hover:border-indigo-400 hover:bg-indigo-50/50 disabled:opacity-50 dark:border-indigo-800 dark:hover:bg-indigo-950/30"
+      >
+        ↓ Add funds {isReady ? "from any chain" : "(connecting…)"}
+      </button>
+      <DepositModal isOpen={open} onClose={() => setOpen(false)} theme="dark" />
+    </>
+  );
+}
+
+function BalanceCard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
+  return (
+    <section className="rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 p-5 text-white">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-indigo-200">
+            Universal balance
+          </p>
+          <p className="mt-1 text-3xl font-bold">
+            {ua.balanceUsd === null ? "—" : `$${ua.balanceUsd.toFixed(2)}`}
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+        <button
+          onClick={ua.refreshBalance}
+          className="rounded-lg bg-white/15 px-2 py-1 text-xs hover:bg-white/25"
+        >
+          ↻ Refresh
+        </button>
+      </div>
+      <div className="mt-4 flex items-center justify-between text-xs text-indigo-100">
+        <span title={ua.eoa ?? ""}>
+          {ua.email} · {ua.eoa ? `${ua.eoa.slice(0, 6)}…${ua.eoa.slice(-4)}` : ""}
+        </span>
+        <button onClick={ua.logout} className="underline hover:text-white">
+          Sign out
+        </button>
+      </div>
+      <p className="mt-2 text-[11px] text-indigo-200">
+        EOA upgraded in-place via EIP-7702 — assets from every chain, one number.
+      </p>
+    </section>
+  );
+}
+
+function SuccessCard({
+  result,
+  onDismiss,
+}: {
+  result: PayResult;
+  onDismiss: () => void;
+}) {
+  return (
+    <section className="rounded-2xl border border-emerald-300 bg-emerald-50 p-5 dark:border-emerald-800 dark:bg-emerald-950/40">
+      <div className="flex items-center justify-between">
+        <h3 className="font-medium text-emerald-700 dark:text-emerald-300">
+          ✓ ${result.total} sent
+        </h3>
+        <button onClick={onDismiss} className="text-emerald-600">
+          ✕
+        </button>
+      </div>
+      <p className="mt-1 text-sm text-emerald-700/80 dark:text-emerald-300/80">
+        Paid {result.recipients} {result.recipients > 1 ? "people" : "person"},
+        settled on Arbitrum.
+      </p>
+      <a
+        href={result.explorerUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="mt-2 inline-block text-sm font-medium text-emerald-700 underline dark:text-emerald-300"
+      >
+        View on Arbiscan →
+      </a>
+    </section>
+  );
+}
+
+function Footer() {
+  return (
+    <footer className="mt-auto pt-4 text-center text-[11px] text-zinc-400">
+      Particle Universal Accounts (EIP-7702) · Magic · Arbitrum
+    </footer>
   );
 }

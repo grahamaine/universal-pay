@@ -1,36 +1,46 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Universal Pay
 
-## Getting Started
+**Pay or split with anyone — any chain, any token, one balance.**
 
-First, run the development server:
+A Venmo-style consumer payments app where the user never thinks about wallets, gas,
+bridges, or chains. Sign in with an email, and send or split money that gets settled
+on Arbitrum — funded from whatever assets you hold across any chain.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## How it qualifies (3 prizes, one app)
+
+| Prize | How |
+|---|---|
+| **Particle — Universal Accounts Track** | `UniversalAccount` initialized in **EIP-7702 mode** (`smartAccountOptions.useEIP7702 = true`). The user's EOA is upgraded in-place — one balance, cross-chain transfers. |
+| **Arbitrum — Road to Open House** | Every payment settles in USDC on **Arbitrum One** (`createTransferTransaction` → token on chainId 42161). |
+| **Magic Labs — Bonus** | Onboarding is **Magic embedded wallet** email OTP login — no MetaMask, no seed phrase. |
+
+## Architecture
+
+```
+Magic embedded wallet (email OTP → EOA + ethers signer)
+        ↓ ownerAddress
+Particle Universal Account (EIP-7702 mode — EOA upgraded in place)
+        ↓ createTransferTransaction → sign rootHash → sendTransaction
+Cross-chain USDC settled on Arbitrum One
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Key files:
+- `src/lib/magic.ts` — Magic client (email OTP)
+- `src/hooks/useUniversalPay.ts` — session bootstrap, UA init (7702), balance, pay/split
+- `src/app/page.tsx` — consumer UI
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Run locally
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. `cp .env.local.example .env.local` and fill in:
+   - `NEXT_PUBLIC_MAGIC_KEY` — from https://dashboard.magic.link
+   - `NEXT_PUBLIC_PARTICLE_PROJECT_ID` / `_CLIENT_KEY` / `_APP_ID` — from
+     https://dashboard.particle.network
+2. `npm install`
+3. `npm run dev` → http://localhost:3000
 
-## Learn More
+## The cross-chain value moment
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+A single tap on **Send** / **Split** calls `createTransferTransaction` targeting USDC
+on Arbitrum, signs the returned `rootHash` with the Magic signer, and submits via
+`sendTransaction`. The Universal Account sources the funds from the user's aggregated
+cross-chain balance — the user picks neither a chain nor a source token.

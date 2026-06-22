@@ -1,4 +1,8 @@
 @import "tailwindcss";
+/* universal-deposit ships its UI as Tailwind utility classes. v0.1.2 doesn't
+   include a prebuilt styles.css, so we let Tailwind v4 scan its dist for the
+   classes it uses instead of importing the (missing) stylesheet. */
+@source "../../node_modules/@particle-network/universal-deposit/dist/**/*.mjs";
 
 :root {
   --background: #ffffff;
