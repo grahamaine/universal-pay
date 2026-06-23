@@ -6,8 +6,10 @@ import {
   DepositModal,
   useDeposit,
   CHAIN,
+  getChainName,
 } from "@particle-network/universal-deposit/react";
 import { useUniversalPay, type Recipient, type PayResult } from "@/hooks/useUniversalPay";
+import { useActivity, type ActivityEntry } from "@/hooks/useActivity";
 
 export default function Home() {
   const ua = useUniversalPay();
@@ -104,6 +106,7 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
     { address: "", amount: "" },
   ]);
   const [result, setResult] = useState<PayResult | null>(null);
+  const activity = useActivity(ua.eoa);
 
   const total = recipients
     .reduce((s, r) => s + (Number(r.amount) || 0), 0)
@@ -125,6 +128,15 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
     try {
       const res = await ua.pay(recipients);
       setResult(res);
+      activity.add({
+        id: res.txHash || `pay-${Date.now()}`,
+        kind: res.recipients > 1 ? "split" : "sent",
+        amount: res.total,
+        recipients: res.recipients,
+        token: "USDC",
+        txHash: res.txHash,
+        explorerUrl: res.explorerUrl,
+      });
       setRecipients([{ address: "", amount: "" }]);
     } catch (e) {
       ua.setError(e instanceof Error ? e.message : String(e));
@@ -134,7 +146,11 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
   return (
     <div className="flex flex-col gap-5">
       <BalanceCard ua={ua} />
-      <DepositSection ownerAddress={ua.eoa} onCredited={ua.refreshBalance} />
+      <DepositSection
+        ownerAddress={ua.eoa}
+        onCredited={ua.refreshBalance}
+        onRecord={activity.add}
+      />
 
       <section className="flex flex-col gap-3 rounded-2xl border border-zinc-200 p-5 dark:border-zinc-800">
         <div className="flex items-center justify-between">
@@ -206,6 +222,8 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
       </section>
 
       {result && <SuccessCard result={result} onDismiss={() => setResult(null)} />}
+
+      <ActivityFeed entries={activity.entries} onClear={activity.clear} />
     </div>
   );
 }
@@ -213,21 +231,37 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
 function DepositSection({
   ownerAddress,
   onCredited,
+  onRecord,
 }: {
   ownerAddress: string | null;
   onCredited: () => void;
+  onRecord: (entry: Omit<ActivityEntry, "timestamp">) => void;
 }) {
   const { isReady, recentActivity } = useDeposit({
     ownerAddress: ownerAddress ?? undefined,
   });
   const [open, setOpen] = useState(false);
 
-  // Once a cross-chain deposit lands and is swept to Arbitrum, the universal
-  // balance has changed — pull the fresh number.
-  const completed = recentActivity.filter((a) => a.type === "complete").length;
+  // Once a cross-chain deposit lands and is swept to Arbitrum, refresh the
+  // balance and log it to the activity feed (deduped by id inside `add`).
+  const completed = recentActivity.filter((a) => a.type === "complete");
+  const completedCount = completed.length;
   useEffect(() => {
-    if (completed > 0) onCredited();
-  }, [completed, onCredited]);
+    if (completedCount === 0) return;
+    onCredited();
+    for (const a of completed) {
+      onRecord({
+        id: a.id,
+        kind: "deposit",
+        amount: a.amountUSD.toFixed(2),
+        token: a.token,
+        chainId: a.chainId,
+        explorerUrl: a.result?.explorerUrl,
+      });
+    }
+    // `completed` is derived; gate on its length to avoid re-running each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completedCount, onCredited, onRecord]);
 
   return (
     <>
@@ -308,6 +342,95 @@ function SuccessCard({
       </a>
     </section>
   );
+}
+
+function ActivityFeed({
+  entries,
+  onClear,
+}: {
+  entries: ActivityEntry[];
+  onClear: () => void;
+}) {
+  if (entries.length === 0) return null;
+  return (
+    <section className="flex flex-col gap-2 rounded-2xl border border-zinc-200 p-5 dark:border-zinc-800">
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-medium">Activity</h2>
+        <button
+          onClick={onClear}
+          className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+        >
+          Clear
+        </button>
+      </div>
+      <ul className="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-800">
+        {entries.map((e) => (
+          <ActivityRow key={e.id} entry={e} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function ActivityRow({ entry }: { entry: ActivityEntry }) {
+  const incoming = entry.kind === "deposit";
+  const title =
+    entry.kind === "split"
+      ? `Split with ${entry.recipients} people`
+      : entry.kind === "sent"
+        ? "Sent"
+        : `Deposit${
+            entry.chainId ? ` from ${getChainName(entry.chainId)}` : ""
+          }`;
+
+  return (
+    <li className="flex items-center justify-between gap-3 py-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <span
+          className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm ${
+            incoming
+              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+              : "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300"
+          }`}
+        >
+          {incoming ? "↓" : "↑"}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{title}</p>
+          <p className="text-xs text-zinc-400">{timeAgo(entry.timestamp)}</p>
+        </div>
+      </div>
+      <div className="flex flex-col items-end">
+        <span
+          className={`text-sm font-semibold ${
+            incoming ? "text-emerald-600 dark:text-emerald-400" : ""
+          }`}
+        >
+          {incoming ? "+" : "−"}${entry.amount}
+        </span>
+        {entry.explorerUrl && (
+          <a
+            href={entry.explorerUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[11px] text-indigo-500 hover:underline"
+          >
+            View ↗
+          </a>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function timeAgo(ts: number): string {
+  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (s < 60) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return new Date(ts).toLocaleDateString();
 }
 
 function Footer() {
