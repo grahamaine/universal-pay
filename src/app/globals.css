@@ -5,8 +5,8 @@
 @source "../../node_modules/@particle-network/universal-deposit/dist/**/*.mjs";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #07070b;
+  --foreground: #ededed;
 }
 
 @theme inline {
@@ -16,15 +16,13 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
-  background: var(--background);
+  /* App-wide dark canvas with a soft indigo aura behind the content column. */
+  background:
+    radial-gradient(60rem 40rem at 50% -10%, rgba(99, 102, 241, 0.18), transparent 60%),
+    radial-gradient(40rem 30rem at 100% 10%, rgba(139, 92, 246, 0.12), transparent 55%),
+    var(--background);
+  background-attachment: fixed;
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
 }

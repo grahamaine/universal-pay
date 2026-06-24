@@ -10,6 +10,11 @@ import {
 } from "@particle-network/universal-deposit/react";
 import { useUniversalPay, type Recipient, type PayResult } from "@/hooks/useUniversalPay";
 import { useActivity, type ActivityEntry } from "@/hooks/useActivity";
+import { useContacts } from "@/hooks/useContacts";
+import { ReceiveModal } from "@/components/ReceiveModal";
+import { ScanModal } from "@/components/ScanModal";
+import { ContactsModal } from "@/components/ContactsModal";
+import { parsePayRequest, type PayRequest } from "@/lib/links";
 
 export default function Home() {
   const ua = useUniversalPay();
@@ -33,16 +38,18 @@ export default function Home() {
 
 function Header() {
   return (
-    <header className="flex flex-col gap-1">
-      <div className="flex items-center gap-2">
-        <div className="grid h-9 w-9 place-items-center rounded-xl bg-indigo-600 text-lg font-bold text-white">
-          U
-        </div>
-        <h1 className="text-xl font-semibold tracking-tight">Universal Pay</h1>
+    <header className="flex items-center gap-3">
+      <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-lg font-bold text-white shadow-lg shadow-indigo-900/40">
+        U
       </div>
-      <p className="text-sm text-zinc-500">
-        Pay or split with anyone — any chain, any token, one balance.
-      </p>
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight text-white">
+          Universal Pay
+        </h1>
+        <p className="text-xs text-zinc-500">
+          Pay or split with anyone — any chain, any token, one balance.
+        </p>
+      </div>
     </header>
   );
 }
@@ -50,8 +57,9 @@ function Header() {
 function Skeleton() {
   return (
     <div className="animate-pulse space-y-4">
-      <div className="h-28 rounded-2xl bg-zinc-200/70 dark:bg-zinc-800" />
-      <div className="h-40 rounded-2xl bg-zinc-200/70 dark:bg-zinc-800" />
+      <div className="h-32 rounded-3xl bg-white/5" />
+      <div className="h-16 rounded-2xl bg-white/5" />
+      <div className="h-44 rounded-3xl bg-white/5" />
     </div>
   );
 }
@@ -72,11 +80,11 @@ function Login({
         e.preventDefault();
         if (email.trim()) onLogin(email.trim());
       }}
-      className="flex flex-col gap-4 rounded-2xl border border-zinc-200 p-6 dark:border-zinc-800"
+      className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur"
     >
       <div className="space-y-1">
-        <h2 className="text-lg font-medium">Sign in</h2>
-        <p className="text-sm text-zinc-500">
+        <h2 className="text-lg font-medium text-white">Sign in</h2>
+        <p className="text-sm text-zinc-400">
           No wallet, no seed phrase. Just your email — we upgrade it into a
           chain-abstracted account behind the scenes.
         </p>
@@ -87,7 +95,7 @@ function Login({
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         placeholder="you@email.com"
-        className="rounded-xl border border-zinc-300 bg-transparent px-4 py-3 text-sm outline-none focus:border-indigo-500 dark:border-zinc-700"
+        className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-indigo-500"
       />
       <button
         type="submit"
@@ -96,7 +104,7 @@ function Login({
       >
         {busy ? "Setting up your account…" : "Continue with email"}
       </button>
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p className="text-sm text-red-400">{error}</p>}
     </form>
   );
 }
@@ -106,7 +114,20 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
     { address: "", amount: "" },
   ]);
   const [result, setResult] = useState<PayResult | null>(null);
+  const [incoming, setIncoming] = useState<PayRequest | null>(null);
+  const [sheet, setSheet] = useState<null | "receive" | "scan" | "contacts">(null);
   const activity = useActivity(ua.eoa);
+  const contacts = useContacts(ua.eoa);
+
+  // Honour an incoming "request money" link: ?to=…&amount=…&note=…
+  useEffect(() => {
+    const req = parsePayRequest(new URLSearchParams(window.location.search));
+    if (!req) return;
+    setIncoming(req);
+    setRecipients([{ address: req.to, amount: req.amount ?? "" }]);
+    // Clean the URL so a refresh doesn't keep re-prefilling.
+    window.history.replaceState({}, "", window.location.pathname);
+  }, []);
 
   const total = recipients
     .reduce((s, r) => s + (Number(r.amount) || 0), 0)
@@ -121,6 +142,15 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
   }
   function removeRecipient(i: number) {
     setRecipients((rs) => rs.filter((_, idx) => idx !== i));
+  }
+  function fillFirstEmpty(address: string, amount?: string) {
+    setRecipients((rs) => {
+      const i = rs.findIndex((r) => !r.address.trim());
+      const idx = i === -1 ? rs.length : i;
+      const next = i === -1 ? [...rs, { address: "", amount: "" }] : [...rs];
+      next[idx] = { address, amount: amount ?? next[idx]?.amount ?? "" };
+      return next;
+    });
   }
 
   async function handlePay() {
@@ -138,6 +168,7 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
         explorerUrl: res.explorerUrl,
       });
       setRecipients([{ address: "", amount: "" }]);
+      setIncoming(null);
     } catch (e) {
       ua.setError(e instanceof Error ? e.message : String(e));
     }
@@ -146,89 +177,122 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
   return (
     <div className="flex flex-col gap-5">
       <BalanceCard ua={ua} />
-      <DepositSection
-        ownerAddress={ua.eoa}
-        onCredited={ua.refreshBalance}
-        onRecord={activity.add}
+
+      <QuickActions
+        ownerReady={!!ua.eoa}
+        onReceive={() => setSheet("receive")}
+        onScan={() => setSheet("scan")}
+        onContacts={() => setSheet("contacts")}
+        depositSlot={
+          <DepositAction
+            ownerAddress={ua.eoa}
+            onCredited={ua.refreshBalance}
+            onRecord={activity.add}
+          />
+        }
       />
 
-      <section className="flex flex-col gap-3 rounded-2xl border border-zinc-200 p-5 dark:border-zinc-800">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-medium">
-            {isSplit ? "Split a bill" : "Send money"}
-          </h2>
-          <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500 dark:bg-zinc-800">
-            settles on Arbitrum
-          </span>
-        </div>
-
-        {recipients.map((r, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <input
-              value={r.address}
-              onChange={(e) => update(i, { address: e.target.value })}
-              placeholder="0x recipient address"
-              className="min-w-0 flex-1 rounded-xl border border-zinc-300 bg-transparent px-3 py-2.5 font-mono text-xs outline-none focus:border-indigo-500 dark:border-zinc-700"
-            />
-            <div className="flex items-center rounded-xl border border-zinc-300 px-2 dark:border-zinc-700">
-              <span className="text-xs text-zinc-400">$</span>
-              <input
-                value={r.amount}
-                onChange={(e) => update(i, { amount: e.target.value })}
-                inputMode="decimal"
-                placeholder="0.00"
-                className="w-16 bg-transparent px-1 py-2.5 text-right text-sm outline-none"
-              />
-            </div>
-            {recipients.length > 1 && (
-              <button
-                onClick={() => removeRecipient(i)}
-                className="text-zinc-400 hover:text-red-500"
-                aria-label="remove"
-              >
-                ✕
-              </button>
-            )}
+      {incoming && (
+        <div className="flex items-start gap-3 rounded-2xl border border-indigo-500/30 bg-indigo-500/10 p-4 text-sm">
+          <span className="text-lg">💸</span>
+          <div className="min-w-0">
+            <p className="font-medium text-indigo-200">Payment request loaded</p>
+            <p className="text-indigo-300/70">
+              {incoming.note ? `“${incoming.note}” — ` : ""}
+              {incoming.amount ? `$${incoming.amount} ` : ""}prefilled below.
+            </p>
           </div>
-        ))}
-
-        <button
-          onClick={addRecipient}
-          className="self-start text-sm font-medium text-indigo-600 hover:text-indigo-500"
-        >
-          + Add person to split
-        </button>
-
-        <div className="mt-1 flex items-center justify-between border-t border-zinc-100 pt-3 text-sm dark:border-zinc-800">
-          <span className="text-zinc-500">
-            Total {isSplit ? `· ${recipients.length} people` : ""}
-          </span>
-          <span className="font-semibold">${total} USDC</span>
         </div>
+      )}
 
-        <button
-          onClick={handlePay}
-          disabled={ua.busy}
-          className="rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
-        >
-          {ua.busy
-            ? "Sending…"
-            : isSplit
-              ? `Split $${total}`
-              : `Send $${total}`}
-        </button>
-
-        {ua.error && <p className="text-sm text-red-500">{ua.error}</p>}
-      </section>
+      <SendCard
+        recipients={recipients}
+        isSplit={isSplit}
+        total={total}
+        busy={ua.busy}
+        error={ua.error}
+        contacts={contacts}
+        onUpdate={update}
+        onAdd={addRecipient}
+        onRemove={removeRecipient}
+        onPay={handlePay}
+      />
 
       {result && <SuccessCard result={result} onDismiss={() => setResult(null)} />}
 
       <ActivityFeed entries={activity.entries} onClear={activity.clear} />
+
+      <ReceiveModal
+        open={sheet === "receive"}
+        onClose={() => setSheet(null)}
+        address={ua.eoa ?? ""}
+      />
+      <ScanModal
+        open={sheet === "scan"}
+        onClose={() => setSheet(null)}
+        onResult={(req) => fillFirstEmpty(req.to, req.amount)}
+      />
+      <ContactsModal
+        open={sheet === "contacts"}
+        onClose={() => setSheet(null)}
+        contacts={contacts}
+        onPick={(addr) => fillFirstEmpty(addr)}
+      />
     </div>
   );
 }
 
-function DepositSection({
+function QuickActions({
+  ownerReady,
+  onReceive,
+  onScan,
+  onContacts,
+  depositSlot,
+}: {
+  ownerReady: boolean;
+  onReceive: () => void;
+  onScan: () => void;
+  onContacts: () => void;
+  depositSlot: React.ReactNode;
+}) {
+  return (
+    <div className="grid grid-cols-4 gap-2">
+      {depositSlot}
+      <ActionButton icon="↓" label="Get paid" onClick={onReceive} disabled={!ownerReady} />
+      <ActionButton icon="⌗" label="Scan" onClick={onScan} />
+      <ActionButton icon="☆" label="Contacts" onClick={onContacts} />
+    </div>
+  );
+}
+
+function ActionButton({
+  icon,
+  label,
+  onClick,
+  disabled,
+}: {
+  icon: string;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex flex-col items-center gap-1.5 rounded-2xl border border-white/10 bg-white/[0.03] py-3 text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.06] disabled:opacity-40"
+    >
+      <span className="grid h-8 w-8 place-items-center rounded-full bg-indigo-600/20 text-base text-indigo-300">
+        {icon}
+      </span>
+      <span className="text-[11px] font-medium">{label}</span>
+    </button>
+  );
+}
+
+// The deposit hook lives here so it can sit inside the QuickActions row while
+// still listening for completed cross-chain deposits to refresh balance + log.
+function DepositAction({
   ownerAddress,
   onCredited,
   onRecord,
@@ -242,8 +306,6 @@ function DepositSection({
   });
   const [open, setOpen] = useState(false);
 
-  // Once a cross-chain deposit lands and is swept to Arbitrum, refresh the
-  // balance and log it to the activity feed (deduped by id inside `add`).
   const completed = recentActivity.filter((a) => a.type === "complete");
   const completedCount = completed.length;
   useEffect(() => {
@@ -265,27 +327,180 @@ function DepositSection({
 
   return (
     <>
-      <button
+      <ActionButton
+        icon="+"
+        label={isReady ? "Add funds" : "…"}
         onClick={() => setOpen(true)}
         disabled={!isReady}
-        className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-indigo-300 py-3 text-sm font-semibold text-indigo-600 transition hover:border-indigo-400 hover:bg-indigo-50/50 disabled:opacity-50 dark:border-indigo-800 dark:hover:bg-indigo-950/30"
-      >
-        ↓ Add funds {isReady ? "from any chain" : "(connecting…)"}
-      </button>
+      />
       <DepositModal isOpen={open} onClose={() => setOpen(false)} theme="dark" />
     </>
   );
 }
 
+function SendCard({
+  recipients,
+  isSplit,
+  total,
+  busy,
+  error,
+  contacts,
+  onUpdate,
+  onAdd,
+  onRemove,
+  onPay,
+}: {
+  recipients: Recipient[];
+  isSplit: boolean;
+  total: string;
+  busy: boolean;
+  error: string | null;
+  contacts: ReturnType<typeof useContacts>;
+  onUpdate: (i: number, patch: Partial<Recipient>) => void;
+  onAdd: () => void;
+  onRemove: (i: number) => void;
+  onPay: () => void;
+}) {
+  return (
+    <section className="flex flex-col gap-3 rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-medium text-white">
+          {isSplit ? "Split a bill" : "Send money"}
+        </h2>
+        <span className="rounded-full bg-white/5 px-2.5 py-0.5 text-xs text-zinc-400">
+          settles on Arbitrum
+        </span>
+      </div>
+
+      {recipients.map((r, i) => {
+        const known = contacts.find(r.address);
+        return (
+          <div key={i} className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <input
+                value={r.address}
+                onChange={(e) => onUpdate(i, { address: e.target.value })}
+                placeholder="0x recipient address"
+                className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 font-mono text-xs text-white outline-none transition focus:border-indigo-500"
+              />
+              <div className="flex items-center rounded-xl border border-white/10 bg-white/5 px-2">
+                <span className="text-xs text-zinc-500">$</span>
+                <input
+                  value={r.amount}
+                  onChange={(e) => onUpdate(i, { amount: e.target.value })}
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  className="w-16 bg-transparent px-1 py-2.5 text-right text-sm text-white outline-none"
+                />
+              </div>
+              {recipients.length > 1 && (
+                <button
+                  onClick={() => onRemove(i)}
+                  className="text-zinc-500 hover:text-red-400"
+                  aria-label="remove"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            {r.address.trim() &&
+              (known ? (
+                <span className="pl-1 text-xs text-emerald-400">★ {known.name}</span>
+              ) : (
+                <SaveContactInline address={r.address} contacts={contacts} />
+              ))}
+          </div>
+        );
+      })}
+
+      <button
+        onClick={onAdd}
+        className="self-start text-sm font-medium text-indigo-400 hover:text-indigo-300"
+      >
+        + Add person to split
+      </button>
+
+      <div className="mt-1 flex items-center justify-between border-t border-white/10 pt-3 text-sm">
+        <span className="text-zinc-400">
+          Total {isSplit ? `· ${recipients.length} people` : ""}
+        </span>
+        <span className="font-semibold text-white">${total} USDC</span>
+      </div>
+
+      <button
+        onClick={onPay}
+        disabled={busy}
+        className="rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+      >
+        {busy ? "Sending…" : isSplit ? `Split $${total}` : `Send $${total}`}
+      </button>
+
+      {error && <p className="text-sm text-red-400">{error}</p>}
+    </section>
+  );
+}
+
+function SaveContactInline({
+  address,
+  contacts,
+}: {
+  address: string;
+  contacts: ReturnType<typeof useContacts>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState("");
+  const valid = /^0x[a-fA-F0-9]{40}$/.test(address.trim());
+  if (!valid) return null;
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => setEditing(true)}
+        className="self-start pl-1 text-xs text-zinc-500 hover:text-indigo-400"
+      >
+        + Save as contact
+      </button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1.5 pl-1">
+      <input
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Name"
+        className="w-28 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white outline-none"
+      />
+      <button
+        onClick={() => {
+          contacts.save(address, name);
+          setEditing(false);
+          setName("");
+        }}
+        className="text-xs font-medium text-emerald-400 hover:text-emerald-300"
+      >
+        Save
+      </button>
+      <button
+        onClick={() => setEditing(false)}
+        className="text-xs text-zinc-500 hover:text-zinc-300"
+      >
+        Cancel
+      </button>
+    </div>
+  );
+}
+
 function BalanceCard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
   return (
-    <section className="rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 p-5 text-white">
-      <div className="flex items-start justify-between">
+    <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-600 p-5 text-white shadow-xl shadow-indigo-950/40">
+      <div className="absolute -right-8 -top-10 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
+      <div className="relative flex items-start justify-between">
         <div>
           <p className="text-xs uppercase tracking-wide text-indigo-200">
             Universal balance
           </p>
-          <p className="mt-1 text-3xl font-bold">
+          <p className="mt-1 text-4xl font-bold">
             {ua.balanceUsd === null ? "—" : `$${ua.balanceUsd.toFixed(2)}`}
           </p>
         </div>
@@ -296,7 +511,7 @@ function BalanceCard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
           ↻ Refresh
         </button>
       </div>
-      <div className="mt-4 flex items-center justify-between text-xs text-indigo-100">
+      <div className="relative mt-5 flex items-center justify-between text-xs text-indigo-100">
         <span title={ua.eoa ?? ""}>
           {ua.email} · {ua.eoa ? `${ua.eoa.slice(0, 6)}…${ua.eoa.slice(-4)}` : ""}
         </span>
@@ -304,7 +519,7 @@ function BalanceCard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
           Sign out
         </button>
       </div>
-      <p className="mt-2 text-[11px] text-indigo-200">
+      <p className="relative mt-2 text-[11px] text-indigo-200/80">
         EOA upgraded in-place via EIP-7702 — assets from every chain, one number.
       </p>
     </section>
@@ -319,16 +534,14 @@ function SuccessCard({
   onDismiss: () => void;
 }) {
   return (
-    <section className="rounded-2xl border border-emerald-300 bg-emerald-50 p-5 dark:border-emerald-800 dark:bg-emerald-950/40">
+    <section className="rounded-3xl border border-emerald-500/30 bg-emerald-500/10 p-5">
       <div className="flex items-center justify-between">
-        <h3 className="font-medium text-emerald-700 dark:text-emerald-300">
-          ✓ ${result.total} sent
-        </h3>
-        <button onClick={onDismiss} className="text-emerald-600">
+        <h3 className="font-medium text-emerald-300">✓ ${result.total} sent</h3>
+        <button onClick={onDismiss} className="text-emerald-400">
           ✕
         </button>
       </div>
-      <p className="mt-1 text-sm text-emerald-700/80 dark:text-emerald-300/80">
+      <p className="mt-1 text-sm text-emerald-300/80">
         Paid {result.recipients} {result.recipients > 1 ? "people" : "person"},
         settled on Arbitrum.
       </p>
@@ -336,7 +549,7 @@ function SuccessCard({
         href={result.explorerUrl}
         target="_blank"
         rel="noreferrer"
-        className="mt-2 inline-block text-sm font-medium text-emerald-700 underline dark:text-emerald-300"
+        className="mt-2 inline-block text-sm font-medium text-emerald-300 underline"
       >
         View on Arbiscan →
       </a>
@@ -353,17 +566,17 @@ function ActivityFeed({
 }) {
   if (entries.length === 0) return null;
   return (
-    <section className="flex flex-col gap-2 rounded-2xl border border-zinc-200 p-5 dark:border-zinc-800">
+    <section className="flex flex-col gap-2 rounded-3xl border border-white/10 bg-white/[0.03] p-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-medium">Activity</h2>
+        <h2 className="text-base font-medium text-white">Activity</h2>
         <button
           onClick={onClear}
-          className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+          className="text-xs text-zinc-500 hover:text-zinc-300"
         >
           Clear
         </button>
       </div>
-      <ul className="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-800">
+      <ul className="flex flex-col divide-y divide-white/5">
         {entries.map((e) => (
           <ActivityRow key={e.id} entry={e} />
         ))}
@@ -379,9 +592,7 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
       ? `Split with ${entry.recipients} people`
       : entry.kind === "sent"
         ? "Sent"
-        : `Deposit${
-            entry.chainId ? ` from ${getChainName(entry.chainId)}` : ""
-          }`;
+        : `Deposit${entry.chainId ? ` from ${getChainName(entry.chainId)}` : ""}`;
 
   return (
     <li className="flex items-center justify-between gap-3 py-3">
@@ -389,21 +600,21 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
         <span
           className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm ${
             incoming
-              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
-              : "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300"
+              ? "bg-emerald-500/15 text-emerald-300"
+              : "bg-indigo-500/15 text-indigo-300"
           }`}
         >
           {incoming ? "↓" : "↑"}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{title}</p>
-          <p className="text-xs text-zinc-400">{timeAgo(entry.timestamp)}</p>
+          <p className="truncate text-sm font-medium text-white">{title}</p>
+          <p className="text-xs text-zinc-500">{timeAgo(entry.timestamp)}</p>
         </div>
       </div>
       <div className="flex flex-col items-end">
         <span
           className={`text-sm font-semibold ${
-            incoming ? "text-emerald-600 dark:text-emerald-400" : ""
+            incoming ? "text-emerald-400" : "text-white"
           }`}
         >
           {incoming ? "+" : "−"}${entry.amount}
@@ -413,7 +624,7 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
             href={entry.explorerUrl}
             target="_blank"
             rel="noreferrer"
-            className="text-[11px] text-indigo-500 hover:underline"
+            className="text-[11px] text-indigo-400 hover:underline"
           >
             View ↗
           </a>
@@ -435,7 +646,7 @@ function timeAgo(ts: number): string {
 
 function Footer() {
   return (
-    <footer className="mt-auto pt-4 text-center text-[11px] text-zinc-400">
+    <footer className="mt-auto pt-4 text-center text-[11px] text-zinc-600">
       Particle Universal Accounts (EIP-7702) · Magic · Arbitrum
     </footer>
   );
