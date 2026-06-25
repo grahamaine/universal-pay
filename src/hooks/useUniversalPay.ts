@@ -7,11 +7,13 @@ import {
   UNIVERSAL_ACCOUNT_VERSION,
 } from "@particle-network/universal-account-sdk";
 import { getMagic, hasMagicKey } from "@/lib/magic";
+import { EXPLORER_TX } from "@/lib/constants";
 import {
-  SETTLEMENT_CHAIN_ID,
-  ARBITRUM_USDC,
-  EXPLORER_TX,
-} from "@/lib/constants";
+  DEFAULT_SETTLEMENT_TOKEN,
+  tokenMeta,
+  type SettlementToken,
+  type TokenBalance,
+} from "@/lib/tokens";
 
 export type Recipient = { address: string; amount: string };
 
@@ -20,6 +22,7 @@ export type PayResult = {
   explorerUrl: string;
   total: string;
   recipients: number;
+  symbol: string;
 };
 
 type Status = "idle" | "loading" | "ready";
@@ -29,6 +32,7 @@ export function useUniversalPay() {
   const [email, setEmail] = useState<string | null>(null);
   const [eoa, setEoa] = useState<string | null>(null);
   const [balanceUsd, setBalanceUsd] = useState<number | null>(null);
+  const [assets, setAssets] = useState<TokenBalance[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,7 +74,14 @@ export function useUniversalPay() {
           return;
         }
         const magic = getMagic();
-        const isLoggedIn = await magic.user.isLoggedIn();
+        // The iframe handshake can hang indefinitely when the current domain
+        // isn't whitelisted in the Magic dashboard. Race it against a timeout so
+        // we always fall through to the sign-in screen instead of trapping the
+        // app in the "loading" state.
+        const isLoggedIn = await Promise.race([
+          magic.user.isLoggedIn(),
+          new Promise<false>((resolve) => setTimeout(() => resolve(false), 6000)),
+        ]);
         if (!isLoggedIn) {
           if (!cancelled) setStatus("idle");
           return;
@@ -142,32 +153,54 @@ export function useUniversalPay() {
     const ua = uaRef.current;
     if (!ua) return;
     try {
-      const assets = await ua.getPrimaryAssets();
-      setBalanceUsd(Number(assets.totalAmountInUSD ?? 0));
+      const res = await ua.getPrimaryAssets();
+      setBalanceUsd(Number(res.totalAmountInUSD ?? 0));
+      const rows: TokenBalance[] = (res.assets ?? [])
+        .map((a) => {
+          const meta = tokenMeta(String(a.tokenType));
+          return {
+            type: String(a.tokenType),
+            symbol: meta.symbol,
+            name: meta.name,
+            icon: meta.icon,
+            amount: Number(a.amount ?? 0),
+            amountInUSD: Number(a.amountInUSD ?? 0),
+          };
+        })
+        .filter((r) => r.amountInUSD > 0 || r.amount > 0)
+        .sort((a, b) => b.amountInUSD - a.amountInUSD);
+      setAssets(rows);
     } catch (e) {
       setError(errMsg(e));
     }
   }, []);
 
-  // Send a single chain-abstracted USDC transfer that settles on Arbitrum.
-  const sendOne = useCallback(async (to: string, amount: string) => {
-    const ua = uaRef.current;
-    const signer = signerRef.current;
-    if (!ua || !signer) throw new Error("Session not ready");
+  // Send a single chain-abstracted transfer that settles the chosen token on
+  // Arbitrum. The UA auto-sources from whatever assets the sender holds.
+  const sendOne = useCallback(
+    async (to: string, amount: string, token: SettlementToken) => {
+      const ua = uaRef.current;
+      const signer = signerRef.current;
+      if (!ua || !signer) throw new Error("Session not ready");
 
-    const tx = await ua.createTransferTransaction({
-      token: { chainId: SETTLEMENT_CHAIN_ID, address: ARBITRUM_USDC },
-      amount,
-      receiver: to,
-    });
-    const signature = await signer.signMessage(getBytes(tx.rootHash));
-    const result = await ua.sendTransaction(tx, signature);
-    return (result.transactionId ?? result.transactionHash) as string;
-  }, []);
+      const tx = await ua.createTransferTransaction({
+        token: { chainId: token.chainId, address: token.address },
+        amount,
+        receiver: to,
+      });
+      const signature = await signer.signMessage(getBytes(tx.rootHash));
+      const result = await ua.sendTransaction(tx, signature);
+      return (result.transactionId ?? result.transactionHash) as string;
+    },
+    []
+  );
 
-  // Pay or split: one or many recipients, each settled on Arbitrum via the UA.
+  // Pay or split: one or many recipients, each settled in `token` on Arbitrum.
   const pay = useCallback(
-    async (recipients: Recipient[]): Promise<PayResult> => {
+    async (
+      recipients: Recipient[],
+      token: SettlementToken = DEFAULT_SETTLEMENT_TOKEN
+    ): Promise<PayResult> => {
       setError(null);
       setBusy(true);
       try {
@@ -178,12 +211,11 @@ export function useUniversalPay() {
 
         let lastHash = "";
         for (const r of valid) {
-          lastHash = await sendOne(r.address.trim(), r.amount.trim());
+          lastHash = await sendOne(r.address.trim(), r.amount.trim(), token);
         }
 
-        const total = valid
-          .reduce((s, r) => s + Number(r.amount), 0)
-          .toFixed(2);
+        const sum = valid.reduce((s, r) => s + Number(r.amount), 0);
+        const total = token.stable ? sum.toFixed(2) : trimNum(sum);
 
         await refreshBalance();
         return {
@@ -191,6 +223,7 @@ export function useUniversalPay() {
           explorerUrl: EXPLORER_TX(lastHash),
           total,
           recipients: valid.length,
+          symbol: token.symbol,
         };
       } finally {
         setBusy(false);
@@ -204,6 +237,7 @@ export function useUniversalPay() {
     email,
     eoa,
     balanceUsd,
+    assets,
     busy,
     error,
     setError,
@@ -217,4 +251,9 @@ export function useUniversalPay() {
 function errMsg(e: unknown): string {
   if (e instanceof Error) return e.message;
   return String(e);
+}
+
+// Format a token amount without trailing-zero noise (e.g. 0.0100 → "0.01").
+function trimNum(n: number): string {
+  return Number(n.toFixed(6)).toString();
 }

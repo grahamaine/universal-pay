@@ -15,6 +15,11 @@ import { ReceiveModal } from "@/components/ReceiveModal";
 import { ScanModal } from "@/components/ScanModal";
 import { ContactsModal } from "@/components/ContactsModal";
 import { parsePayRequest, type PayRequest } from "@/lib/links";
+import {
+  SETTLEMENT_TOKENS,
+  DEFAULT_SETTLEMENT_TOKEN,
+  type SettlementToken,
+} from "@/lib/tokens";
 
 export default function Home() {
   const ua = useUniversalPay();
@@ -115,6 +120,7 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
   ]);
   const [result, setResult] = useState<PayResult | null>(null);
   const [incoming, setIncoming] = useState<PayRequest | null>(null);
+  const [token, setToken] = useState<SettlementToken>(DEFAULT_SETTLEMENT_TOKEN);
   const [sheet, setSheet] = useState<null | "receive" | "scan" | "contacts">(null);
   const activity = useActivity(ua.eoa);
   const contacts = useContacts(ua.eoa);
@@ -129,9 +135,10 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
     window.history.replaceState({}, "", window.location.pathname);
   }, []);
 
-  const total = recipients
-    .reduce((s, r) => s + (Number(r.amount) || 0), 0)
-    .toFixed(2);
+  const totalNum = recipients.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const total = token.stable
+    ? totalNum.toFixed(2)
+    : Number(totalNum.toFixed(6)).toString();
   const isSplit = recipients.length > 1;
 
   function update(i: number, patch: Partial<Recipient>) {
@@ -156,14 +163,14 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
   async function handlePay() {
     ua.setError(null);
     try {
-      const res = await ua.pay(recipients);
+      const res = await ua.pay(recipients, token);
       setResult(res);
       activity.add({
         id: res.txHash || `pay-${Date.now()}`,
         kind: res.recipients > 1 ? "split" : "sent",
         amount: res.total,
         recipients: res.recipients,
-        token: "USDC",
+        token: res.symbol,
         txHash: res.txHash,
         explorerUrl: res.explorerUrl,
       });
@@ -209,6 +216,8 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
         recipients={recipients}
         isSplit={isSplit}
         total={total}
+        token={token}
+        onToken={setToken}
         busy={ua.busy}
         error={ua.error}
         contacts={contacts}
@@ -342,6 +351,8 @@ function SendCard({
   recipients,
   isSplit,
   total,
+  token,
+  onToken,
   busy,
   error,
   contacts,
@@ -353,6 +364,8 @@ function SendCard({
   recipients: Recipient[];
   isSplit: boolean;
   total: string;
+  token: SettlementToken;
+  onToken: (t: SettlementToken) => void;
   busy: boolean;
   error: string | null;
   contacts: ReturnType<typeof useContacts>;
@@ -367,9 +380,7 @@ function SendCard({
         <h2 className="text-base font-medium text-white">
           {isSplit ? "Split a bill" : "Send money"}
         </h2>
-        <span className="rounded-full bg-white/5 px-2.5 py-0.5 text-xs text-zinc-400">
-          settles on Arbitrum
-        </span>
+        <TokenPicker token={token} onToken={onToken} />
       </div>
 
       {recipients.map((r, i) => {
@@ -384,12 +395,12 @@ function SendCard({
                 className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 font-mono text-xs text-white outline-none transition focus:border-indigo-500"
               />
               <div className="flex items-center rounded-xl border border-white/10 bg-white/5 px-2">
-                <span className="text-xs text-zinc-500">$</span>
+                <span className="text-xs text-zinc-500">{token.icon}</span>
                 <input
                   value={r.amount}
                   onChange={(e) => onUpdate(i, { amount: e.target.value })}
                   inputMode="decimal"
-                  placeholder="0.00"
+                  placeholder={token.stable ? "0.00" : "0.0"}
                   className="w-16 bg-transparent px-1 py-2.5 text-right text-sm text-white outline-none"
                 />
               </div>
@@ -424,7 +435,9 @@ function SendCard({
         <span className="text-zinc-400">
           Total {isSplit ? `· ${recipients.length} people` : ""}
         </span>
-        <span className="font-semibold text-white">${total} USDC</span>
+        <span className="font-semibold text-white">
+          {total} {token.symbol}
+        </span>
       </div>
 
       <button
@@ -432,11 +445,60 @@ function SendCard({
         disabled={busy}
         className="rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
       >
-        {busy ? "Sending…" : isSplit ? `Split $${total}` : `Send $${total}`}
+        {busy
+          ? "Sending…"
+          : `${isSplit ? "Split" : "Send"} ${total} ${token.symbol}`}
       </button>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
     </section>
+  );
+}
+
+function TokenPicker({
+  token,
+  onToken,
+}: {
+  token: SettlementToken;
+  onToken: (t: SettlementToken) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-zinc-300 hover:border-white/20"
+      >
+        <span className="text-indigo-300">{token.icon}</span>
+        <span className="font-medium text-white">{token.symbol}</span>
+        <span className="text-zinc-500">▾</span>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-xl border border-white/10 bg-zinc-900 shadow-xl">
+            {SETTLEMENT_TOKENS.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => {
+                  onToken(t);
+                  setOpen(false);
+                }}
+                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-white/5 ${
+                  t.key === token.key ? "text-white" : "text-zinc-300"
+                }`}
+              >
+                <span className="grid h-6 w-6 place-items-center rounded-full bg-indigo-600/20 text-indigo-300">
+                  {t.icon}
+                </span>
+                <span className="font-medium">{t.symbol}</span>
+                <span className="ml-auto text-xs text-zinc-500">{t.name}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -511,6 +573,24 @@ function BalanceCard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
           ↻ Refresh
         </button>
       </div>
+      {ua.assets.length > 0 && (
+        <div className="relative mt-4 flex flex-wrap gap-1.5">
+          {ua.assets.map((a) => (
+            <span
+              key={a.type}
+              title={`${a.amount} ${a.symbol} · $${a.amountInUSD.toFixed(2)}`}
+              className="flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-xs"
+            >
+              <span className="text-indigo-100">{a.icon}</span>
+              <span className="font-medium">{a.symbol}</span>
+              <span className="text-indigo-200/90">
+                ${a.amountInUSD.toFixed(2)}
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="relative mt-5 flex items-center justify-between text-xs text-indigo-100">
         <span title={ua.eoa ?? ""}>
           {ua.email} · {ua.eoa ? `${ua.eoa.slice(0, 6)}…${ua.eoa.slice(-4)}` : ""}
@@ -536,7 +616,9 @@ function SuccessCard({
   return (
     <section className="rounded-3xl border border-emerald-500/30 bg-emerald-500/10 p-5">
       <div className="flex items-center justify-between">
-        <h3 className="font-medium text-emerald-300">✓ ${result.total} sent</h3>
+        <h3 className="font-medium text-emerald-300">
+          ✓ {result.total} {result.symbol} sent
+        </h3>
         <button onClick={onDismiss} className="text-emerald-400">
           ✕
         </button>
