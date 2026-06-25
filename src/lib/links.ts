@@ -6,14 +6,17 @@ export type PayRequest = {
   to: string;
   amount?: string;
   note?: string;
+  /** Settlement token key the requester wants to be paid in (e.g. "usdc"). */
+  token?: string;
 };
 
-/** Build a "?to=…&amount=…&note=…" link, given an origin (e.g. location.origin). */
+/** Build a "?to=…&amount=…&note=…&token=…" link, given an origin. */
 export function buildPayLink(origin: string, req: PayRequest): string {
   const params = new URLSearchParams();
   params.set("to", req.to.trim());
   if (req.amount && Number(req.amount) > 0) params.set("amount", req.amount.trim());
   if (req.note?.trim()) params.set("note", req.note.trim());
+  if (req.token?.trim()) params.set("token", req.token.trim());
   return `${origin.replace(/\/$/, "")}/?${params.toString()}`;
 }
 
@@ -25,6 +28,7 @@ export function parsePayRequest(search: URLSearchParams): PayRequest | null {
     to,
     amount: search.get("amount") ?? undefined,
     note: search.get("note") ?? undefined,
+    token: search.get("token") ?? undefined,
   };
 }
 
