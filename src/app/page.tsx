@@ -23,6 +23,8 @@ import {
 import { TokenPicker } from "@/components/TokenPicker";
 import { useRequests } from "@/hooks/useRequests";
 import { RequestsCard } from "@/components/RequestsCard";
+import { SplashScreen } from "@/components/SplashScreen";
+import { FeatureSidebar } from "@/components/FeatureSidebar";
 
 export default function Home() {
   const ua = useUniversalPay();
@@ -31,16 +33,51 @@ export default function Home() {
     // Cross-chain deposits all consolidate to the user's account on Arbitrum —
     // the same chain Universal Pay settles transfers on.
     <DepositProvider config={{ destination: { chainId: CHAIN.ARBITRUM } }}>
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-5 py-8">
-        <Header />
-        {ua.status === "loading" && <Skeleton />}
-        {ua.status === "idle" && (
-          <Login busy={ua.busy} error={ua.error} onLogin={ua.login} />
-        )}
-        {ua.status === "ready" && <Dashboard ua={ua} />}
-        <Footer />
-      </main>
+      <SplashScreen />
+      {ua.status === "ready" ? (
+        <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-5 py-8">
+          <Header />
+          <Dashboard ua={ua} />
+          <Footer />
+        </main>
+      ) : (
+        <Landing
+          loading={ua.status === "loading"}
+          busy={ua.busy}
+          error={ua.error}
+          onLogin={ua.login}
+        />
+      )}
     </DepositProvider>
+  );
+}
+
+function Landing({
+  loading,
+  busy,
+  error,
+  onLogin,
+}: {
+  loading: boolean;
+  busy: boolean;
+  error: string | null;
+  onLogin: (email: string) => void;
+}) {
+  return (
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-5 py-8 lg:py-12">
+      <Header />
+      <div className="grid flex-1 items-start gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+        <FeatureSidebar />
+        <div className="rise-in" style={{ animationDelay: "0.15s" }}>
+          {loading ? (
+            <Skeleton />
+          ) : (
+            <Login busy={busy} error={error} onLogin={onLogin} />
+          )}
+        </div>
+      </div>
+      <Footer />
+    </main>
   );
 }
 
@@ -155,6 +192,18 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
   function removeRecipient(i: number) {
     setRecipients((rs) => rs.filter((_, idx) => idx !== i));
   }
+  // Split a single total equally across everyone currently in the form.
+  function splitEvenly(totalStr: string) {
+    const t = Number(totalStr);
+    if (!(t > 0)) return;
+    setRecipients((rs) => {
+      const n = Math.max(rs.length, 1);
+      const each = token.stable
+        ? (t / n).toFixed(2)
+        : Number((t / n).toFixed(6)).toString();
+      return rs.map((r) => ({ ...r, amount: each }));
+    });
+  }
   function fillFirstEmpty(address: string, amount?: string) {
     setRecipients((rs) => {
       const i = rs.findIndex((r) => !r.address.trim());
@@ -229,6 +278,7 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
         onUpdate={update}
         onAdd={addRecipient}
         onRemove={removeRecipient}
+        onSplitEvenly={splitEvenly}
         onPay={handlePay}
       />
 
@@ -366,6 +416,7 @@ function SendCard({
   onUpdate,
   onAdd,
   onRemove,
+  onSplitEvenly,
   onPay,
 }: {
   recipients: Recipient[];
@@ -379,8 +430,10 @@ function SendCard({
   onUpdate: (i: number, patch: Partial<Recipient>) => void;
   onAdd: () => void;
   onRemove: (i: number) => void;
+  onSplitEvenly: (total: string) => void;
   onPay: () => void;
 }) {
+  const [splitTotal, setSplitTotal] = useState("");
   return (
     <section className="flex flex-col gap-3 rounded-3xl border border-white/10 bg-white/[0.03] p-5">
       <div className="flex items-center justify-between">
@@ -431,12 +484,35 @@ function SendCard({
         );
       })}
 
-      <button
-        onClick={onAdd}
-        className="self-start text-sm font-medium text-indigo-400 hover:text-indigo-300"
-      >
-        + Add person to split
-      </button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <button
+          onClick={onAdd}
+          className="text-sm font-medium text-indigo-400 hover:text-indigo-300"
+        >
+          + Add person to split
+        </button>
+
+        {isSplit && (
+          <div className="flex items-center gap-1.5">
+            <div className="flex items-center rounded-lg border border-white/10 bg-white/5 px-2">
+              <span className="text-xs text-zinc-500">{token.icon}</span>
+              <input
+                value={splitTotal}
+                onChange={(e) => setSplitTotal(e.target.value)}
+                inputMode="decimal"
+                placeholder="total"
+                className="w-16 bg-transparent px-1 py-1.5 text-right text-xs text-white outline-none"
+              />
+            </div>
+            <button
+              onClick={() => onSplitEvenly(splitTotal)}
+              className="rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-white/20"
+            >
+              Split evenly
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className="mt-1 flex items-center justify-between border-t border-white/10 pt-3 text-sm">
         <span className="text-zinc-400">
@@ -611,12 +687,20 @@ function ActivityFeed({
     <section className="flex flex-col gap-2 rounded-3xl border border-white/10 bg-white/[0.03] p-5">
       <div className="flex items-center justify-between">
         <h2 className="text-base font-medium text-white">Activity</h2>
-        <button
-          onClick={onClear}
-          className="text-xs text-zinc-500 hover:text-zinc-300"
-        >
-          Clear
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => exportActivityCsv(entries)}
+            className="text-xs text-zinc-500 hover:text-zinc-300"
+          >
+            Export CSV
+          </button>
+          <button
+            onClick={onClear}
+            className="text-xs text-zinc-500 hover:text-zinc-300"
+          >
+            Clear
+          </button>
+        </div>
       </div>
       <ul className="flex flex-col divide-y divide-white/5">
         {entries.map((e) => (
@@ -625,6 +709,31 @@ function ActivityFeed({
       </ul>
     </section>
   );
+}
+
+// Download the activity feed as a CSV the user can keep for their records.
+function exportActivityCsv(entries: ActivityEntry[]) {
+  const header = ["date", "type", "amount", "token", "recipients", "txHash"];
+  const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const rows = entries.map((e) =>
+    [
+      new Date(e.timestamp).toISOString(),
+      e.kind,
+      e.amount,
+      e.token ?? "",
+      e.recipients ?? "",
+      e.txHash ?? "",
+    ]
+      .map(esc)
+      .join(",")
+  );
+  const csv = [header.join(","), ...rows].join("\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `universal-pay-activity-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function ActivityRow({ entry }: { entry: ActivityEntry }) {
