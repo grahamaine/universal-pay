@@ -14,6 +14,7 @@ import { useContacts } from "@/hooks/useContacts";
 import { ReceiveModal } from "@/components/ReceiveModal";
 import { ScanModal } from "@/components/ScanModal";
 import { ContactsModal } from "@/components/ContactsModal";
+import { Modal } from "@/components/Modal";
 import { parsePayRequest, type PayRequest } from "@/lib/links";
 import {
   DEFAULT_SETTLEMENT_TOKEN,
@@ -236,17 +237,19 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
     });
   }
 
+  // Build the payment and park it for confirmation. The preview sheet (driven by
+  // ua.pending) shows the cross-chain sourcing before anything is signed; the
+  // callback below runs only once the user confirms and the tx lands.
   async function handlePay() {
     ua.setError(null);
-    try {
-      const effectiveRecipients =
-        splitMode === "share" && isSplit
-          ? computedShareAmounts().map((amt, i) => ({
-              address: recipients[i].address,
-              amount: amt,
-            }))
-          : recipients;
-      const res = await ua.pay(effectiveRecipients, token);
+    const effectiveRecipients =
+      splitMode === "share" && isSplit
+        ? computedShareAmounts().map((amt, i) => ({
+            address: recipients[i].address,
+            amount: amt,
+          }))
+        : recipients;
+    await ua.preparePay(effectiveRecipients, token, (res) => {
       setResult(res);
       activity.add({
         id: res.txHash || `pay-${Date.now()}`,
@@ -259,9 +262,7 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
       });
       setRecipients([{ address: "", amount: "" }]);
       setIncoming(null);
-    } catch (e) {
-      ua.setError(e instanceof Error ? e.message : String(e));
-    }
+    });
   }
 
   return (
@@ -326,6 +327,8 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
 
       {result && <SuccessCard result={result} onDismiss={() => setResult(null)} />}
 
+      <EarnCard ua={ua} onRecord={activity.add} />
+
       <RequestsCard requests={requests} ownerAddress={ua.eoa} />
 
       <GroupsCard ua={ua} />
@@ -353,6 +356,7 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
         onClose={deposit.close}
         theme="dark"
       />
+      <PreviewSheet ua={ua} />
     </div>
   );
 }
@@ -950,25 +954,37 @@ function exportActivityCsv(entries: ActivityEntry[]) {
 }
 
 function ActivityRow({ entry }: { entry: ActivityEntry }) {
-  const incoming = entry.kind === "deposit";
+  // Money returning to the spendable balance is "incoming" (green +); money
+  // leaving it is outgoing (−); a consolidate just reshapes the same balance.
+  const incoming = entry.kind === "deposit" || entry.kind === "withdraw";
+  const neutral = entry.kind === "consolidate";
   const title =
     entry.kind === "split"
       ? `Split with ${entry.recipients} people`
       : entry.kind === "sent"
         ? "Sent"
-        : `Deposit${entry.chainId ? ` from ${getChainName(entry.chainId)}` : ""}`;
+        : entry.kind === "earn"
+          ? "Deposited to Earn"
+          : entry.kind === "withdraw"
+            ? "Withdrew from Earn"
+            : entry.kind === "consolidate"
+              ? "Consolidated to USDC"
+              : `Deposit${entry.chainId ? ` from ${getChainName(entry.chainId)}` : ""}`;
+  const icon = neutral ? "⇄" : incoming ? "↓" : "↑";
 
   return (
     <li className="flex items-center justify-between gap-3 py-3">
       <div className="flex min-w-0 items-center gap-3">
         <span
           className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm ${
-            incoming
-              ? "bg-emerald-500/15 text-emerald-300"
-              : "bg-indigo-500/15 text-indigo-300"
+            neutral
+              ? "bg-zinc-500/15 text-zinc-300"
+              : incoming
+                ? "bg-emerald-500/15 text-emerald-300"
+                : "bg-indigo-500/15 text-indigo-300"
           }`}
         >
-          {incoming ? "↓" : "↑"}
+          {icon}
         </span>
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-white">{title}</p>
@@ -981,7 +997,7 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
             incoming ? "text-emerald-400" : "text-white"
           }`}
         >
-          {incoming ? "+" : "−"}${entry.amount}
+          {neutral ? "" : incoming ? "+" : "−"}${entry.amount}
         </span>
         {entry.explorerUrl && (
           <a
@@ -1006,6 +1022,255 @@ function timeAgo(ts: number): string {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
   return new Date(ts).toLocaleDateString();
+}
+
+// Confirmation sheet that makes the chain-abstraction visible: before signing,
+// it shows which chains funded the action, swaps routed, the fee, and that no
+// native gas token was ever required.
+function PreviewSheet({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
+  const p = ua.pending;
+  return (
+    <Modal open={!!p} onClose={ua.cancelPending} title="Review transaction">
+      {p && (
+        <div className="flex flex-col gap-4">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-indigo-300">
+              {p.preview.action}
+            </p>
+            <p className="mt-0.5 text-sm text-zinc-300">{p.preview.summary}</p>
+          </div>
+
+          <div className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm">
+            <PreviewRow label="You pay" value={`$${p.preview.payUsd.toFixed(2)}`} />
+            {p.preview.receiveUsd > 0 && (
+              <PreviewRow
+                label="You receive"
+                value={`$${p.preview.receiveUsd.toFixed(2)}`}
+              />
+            )}
+            <PreviewRow
+              label="Network fee"
+              value={`$${p.preview.feeUsd.toFixed(p.preview.feeUsd < 0.01 ? 4 : 2)}`}
+            />
+            {p.preview.fromChains.length > 0 && (
+              <PreviewRow
+                label="Sourced from"
+                value={p.preview.fromChains.map(getChainName).join(" · ")}
+              />
+            )}
+            {p.preview.swaps > 0 && (
+              <PreviewRow label="Swaps routed" value={String(p.preview.swaps)} />
+            )}
+            <div className="mt-2 flex items-center gap-2 rounded-xl bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
+              <span>⛽</span>
+              <span>No gas token needed — your Universal Account covers it.</span>
+            </div>
+          </div>
+
+          {ua.error && <p className="text-sm text-red-400">{ua.error}</p>}
+
+          <div className="flex gap-2">
+            <button
+              onClick={ua.cancelPending}
+              className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-medium text-zinc-300 transition hover:bg-white/[0.06]"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={async () => {
+                try {
+                  await ua.confirmPending();
+                } catch (e) {
+                  ua.setError(e instanceof Error ? e.message : String(e));
+                }
+              }}
+              disabled={ua.busy}
+              className="flex-1 rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+            >
+              {ua.busy ? "Confirming…" : `Confirm ${p.preview.action}`}
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function PreviewRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-zinc-500">{label}</span>
+      <span className="text-right font-medium text-white">{value}</span>
+    </div>
+  );
+}
+
+// Universal Earn — put the chain-abstracted balance to work in Aave v3 on
+// Arbitrum, funded from any asset on any chain, withdraw anytime. Includes an
+// inline "consolidate scattered tokens → USDC" helper since Earn settles in USDC.
+function EarnCard({
+  ua,
+  onRecord,
+}: {
+  ua: ReturnType<typeof useUniversalPay>;
+  onRecord: (entry: Omit<ActivityEntry, "timestamp">) => void;
+}) {
+  const [mode, setMode] = useState<"earn" | "withdraw">("earn");
+  const [amount, setAmount] = useState("");
+  const supplied = ua.earn?.supplied ?? 0;
+  const apr = ua.earn?.apr ?? 0;
+
+  // Total USD held in non-USDC assets — what a "consolidate" would sweep.
+  const scattered = ua.assets
+    .filter((a) => a.type.toLowerCase() !== "usdc")
+    .reduce((s, a) => s + a.amountInUSD, 0);
+
+  async function submit() {
+    const amt = amount;
+    if (mode === "earn") {
+      await ua.prepareEarn(amt, (hash) => {
+        onRecord({
+          id: hash || `earn-${Date.now()}`,
+          kind: "earn",
+          amount: Number(amt).toFixed(2),
+          token: "USDC",
+        });
+        setAmount("");
+      });
+    } else {
+      await ua.prepareWithdraw(amt, false, (hash) => {
+        onRecord({
+          id: hash || `withdraw-${Date.now()}`,
+          kind: "withdraw",
+          amount: Number(amt).toFixed(2),
+          token: "USDC",
+        });
+        setAmount("");
+      });
+    }
+  }
+
+  async function withdrawAll() {
+    const snapshot = supplied;
+    await ua.prepareWithdraw("0", true, (hash) =>
+      onRecord({
+        id: hash || `withdraw-${Date.now()}`,
+        kind: "withdraw",
+        amount: snapshot.toFixed(2),
+        token: "USDC",
+      })
+    );
+  }
+
+  async function consolidate() {
+    const amt = scattered.toFixed(2);
+    await ua.prepareConsolidate(amt, (hash) =>
+      onRecord({
+        id: hash || `consolidate-${Date.now()}`,
+        kind: "consolidate",
+        amount: amt,
+        token: "USDC",
+      })
+    );
+  }
+
+  return (
+    <section className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="flex items-center gap-2 text-base font-medium text-white">
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-500/15 text-sm text-emerald-300">
+              ✦
+            </span>
+            Universal Earn
+          </h2>
+          <p className="mt-0.5 text-xs text-zinc-500">
+            Earn yield on your whole balance — funded from any chain, on Aave v3.
+          </p>
+        </div>
+        {apr > 0 && (
+          <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-semibold text-emerald-300">
+            {apr.toFixed(2)}% APR
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between rounded-2xl bg-white/[0.03] px-4 py-3">
+        <span className="text-xs text-zinc-500">Currently earning</span>
+        <span className="text-lg font-semibold text-white">
+          ${supplied.toFixed(2)}{" "}
+          <span className="text-xs font-normal text-zinc-500">USDC</span>
+        </span>
+      </div>
+
+      {/* Earn / Withdraw toggle */}
+      <div className="flex items-center gap-0.5 self-start rounded-full border border-white/10 p-0.5 text-xs">
+        <button
+          onClick={() => setMode("earn")}
+          className={`rounded-full px-3 py-1 font-medium transition ${
+            mode === "earn" ? "bg-emerald-600 text-white" : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          Deposit
+        </button>
+        <button
+          onClick={() => setMode("withdraw")}
+          disabled={supplied <= 0}
+          className={`rounded-full px-3 py-1 font-medium transition disabled:opacity-40 ${
+            mode === "withdraw" ? "bg-emerald-600 text-white" : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          Withdraw
+        </button>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <div className="flex flex-1 items-center rounded-xl border border-white/10 bg-white/5 px-3">
+          <span className="text-xs text-zinc-500">$</span>
+          <input
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            inputMode="decimal"
+            placeholder="0.00"
+            className="w-full bg-transparent px-2 py-2.5 text-sm text-white outline-none"
+          />
+          <span className="text-xs text-zinc-500">USDC</span>
+        </div>
+        <button
+          onClick={submit}
+          disabled={ua.busy || !(Number(amount) > 0)}
+          className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50"
+        >
+          {mode === "earn" ? "Earn" : "Withdraw"}
+        </button>
+      </div>
+
+      {mode === "withdraw" && supplied > 0 && (
+        <button
+          onClick={withdrawAll}
+          disabled={ua.busy}
+          className="self-start text-xs font-medium text-emerald-400 hover:text-emerald-300 disabled:opacity-50"
+        >
+          Withdraw all (${supplied.toFixed(2)})
+        </button>
+      )}
+
+      {scattered > 0.01 && (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.02] px-4 py-3">
+          <span className="text-xs text-zinc-400">
+            ${scattered.toFixed(2)} in other tokens — consolidate to USDC?
+          </span>
+          <button
+            onClick={consolidate}
+            disabled={ua.busy}
+            className="shrink-0 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-white/20 disabled:opacity-50"
+          >
+            Consolidate
+          </button>
+        </div>
+      )}
+    </section>
+  );
 }
 
 function Footer() {

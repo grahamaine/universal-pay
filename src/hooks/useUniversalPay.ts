@@ -5,17 +5,55 @@ import { BrowserProvider, getBytes, type JsonRpcSigner } from "ethers";
 import {
   UniversalAccount,
   UNIVERSAL_ACCOUNT_VERSION,
+  SUPPORTED_TOKEN_TYPE,
+  type ITransaction,
 } from "@particle-network/universal-account-sdk";
 import { getMagic, hasMagicKey } from "@/lib/magic";
-import { EXPLORER_TX } from "@/lib/constants";
+import { EXPLORER_TX, SETTLEMENT_CHAIN_ID } from "@/lib/constants";
 import {
   DEFAULT_SETTLEMENT_TOKEN,
   tokenMeta,
   type SettlementToken,
   type TokenBalance,
 } from "@/lib/tokens";
+import {
+  buildSupplyCalls,
+  buildWithdrawCalls,
+  readEarnPosition,
+  type EarnPosition,
+} from "@/lib/defi";
 
 export type Recipient = { address: string; amount: string };
+
+// A human-readable preview of what a Universal Account transaction will do,
+// distilled from ITransaction.tokenChanges — this is the chain-abstraction made
+// visible: which chains funded it, how many swaps, the fee, and that no native
+// gas token was ever required.
+export type TxPreview = {
+  action: string;
+  summary: string;
+  /** USD leaving the user's balance. */
+  payUsd: number;
+  /** USD the user receives (convert/withdraw). */
+  receiveUsd: number;
+  /** Total fee in USD. */
+  feeUsd: number;
+  /** Source chain ids the value was pulled from. */
+  fromChains: number[];
+  /** Destination chain ids. */
+  toChains: number[];
+  /** Number of swaps the router performed. */
+  swaps: number;
+};
+
+// A built-but-unsent action awaiting the user's confirmation in the preview
+// sheet. `txs` are signed + sent in order; `run` fires the caller's side effects
+// (activity logging, success card) once the last one lands.
+type Pending = {
+  preview: TxPreview;
+  txs: ITransaction[];
+  run: (lastHash: string) => void;
+};
 
 export type PayResult = {
   txHash: string;
@@ -35,6 +73,8 @@ export function useUniversalPay() {
   const [assets, setAssets] = useState<TokenBalance[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [earn, setEarn] = useState<EarnPosition | null>(null);
 
   const uaRef = useRef<UniversalAccount | null>(null);
   const signerRef = useRef<JsonRpcSigner | null>(null);
@@ -60,6 +100,11 @@ export function useUniversalPay() {
     uaRef.current = ua;
     setEoa(address);
     await refreshBalance();
+    try {
+      setEarn(await readEarnPosition(address));
+    } catch {
+      /* read-only; ignore RPC hiccups */
+    }
   }, []);
 
   // Restore an existing Magic session on mount.
@@ -146,6 +191,8 @@ export function useUniversalPay() {
     setEoa(null);
     setEmail(null);
     setBalanceUsd(null);
+    setEarn(null);
+    setPending(null);
     setStatus("idle");
   }, []);
 
@@ -232,20 +279,257 @@ export function useUniversalPay() {
     [sendOne, refreshBalance]
   );
 
+  // Re-read the Aave lending position + live APR.
+  const refreshEarn = useCallback(async () => {
+    if (!eoa) return;
+    try {
+      setEarn(await readEarnPosition(eoa));
+    } catch {
+      /* ignore */
+    }
+  }, [eoa]);
+
+  // Sign a built Universal Account transaction and broadcast it.
+  const signAndSend = useCallback(async (tx: ITransaction): Promise<string> => {
+    const ua = uaRef.current;
+    const signer = signerRef.current;
+    if (!ua || !signer) throw new Error("Session not ready");
+    const signature = await signer.signMessage(getBytes(tx.rootHash));
+    const result = await ua.sendTransaction(tx, signature);
+    return (result.transactionId ?? result.transactionHash) as string;
+  }, []);
+
+  // Confirm the pending action: sign + send each built tx in order, fire the
+  // caller's side effects, then refresh balance + lending position.
+  const confirmPending = useCallback(async (): Promise<string> => {
+    if (!pending) throw new Error("Nothing to confirm");
+    setError(null);
+    setBusy(true);
+    try {
+      let last = "";
+      for (const tx of pending.txs) last = await signAndSend(tx);
+      pending.run(last);
+      await refreshBalance();
+      await refreshEarn();
+      setPending(null);
+      return last;
+    } finally {
+      setBusy(false);
+    }
+  }, [pending, signAndSend, refreshBalance, refreshEarn]);
+
+  const cancelPending = useCallback(() => setPending(null), []);
+
+  // ── Action builders: each constructs the transaction(s) and a preview, then
+  // parks them in `pending` for the confirm sheet. None of these broadcast — the
+  // user reviews the cross-chain sourcing first, then calls confirmPending.
+
+  // Pay / split — settled in `token` on Arbitrum, sourced from any held asset.
+  const preparePay = useCallback(
+    async (
+      recipients: Recipient[],
+      token: SettlementToken,
+      onConfirmed: (res: PayResult) => void
+    ) => {
+      setError(null);
+      setBusy(true);
+      try {
+        const ua = uaRef.current;
+        if (!ua) throw new Error("Session not ready");
+        const valid = recipients.filter(
+          (r) => r.address.trim() && Number(r.amount) > 0
+        );
+        if (valid.length === 0) throw new Error("Add at least one recipient");
+
+        const txs: ITransaction[] = [];
+        for (const r of valid) {
+          txs.push(
+            await ua.createTransferTransaction({
+              token: { chainId: token.chainId, address: token.address },
+              amount: r.amount.trim(),
+              receiver: r.address.trim(),
+            })
+          );
+        }
+        const sum = valid.reduce((s, r) => s + Number(r.amount), 0);
+        const total = token.stable ? sum.toFixed(2) : trimNum(sum);
+        const isSplit = valid.length > 1;
+        const preview = buildPreview(
+          isSplit ? "Split" : "Send",
+          isSplit
+            ? `Split ${total} ${token.symbol} across ${valid.length} people`
+            : `Send ${total} ${token.symbol}`,
+          txs
+        );
+        setPending({
+          preview,
+          txs,
+          run: (hash) =>
+            onConfirmed({
+              txHash: hash,
+              explorerUrl: EXPLORER_TX(hash),
+              total,
+              recipients: valid.length,
+              symbol: token.symbol,
+            }),
+        });
+      } catch (e) {
+        setError(errMsg(e));
+      } finally {
+        setBusy(false);
+      }
+    },
+    []
+  );
+
+  // Earn: supply USDC into Aave v3 on Arbitrum, funded cross-chain by the UA.
+  const prepareEarn = useCallback(
+    async (amount: string, onConfirmed: (hash: string) => void) => {
+      setError(null);
+      setBusy(true);
+      try {
+        const ua = uaRef.current;
+        if (!ua || !eoa) throw new Error("Session not ready");
+        if (!(Number(amount) > 0)) throw new Error("Enter an amount");
+        const tx = await ua.createUniversalTransaction({
+          chainId: SETTLEMENT_CHAIN_ID,
+          expectTokens: [{ type: SUPPORTED_TOKEN_TYPE.USDC, amount }],
+          transactions: buildSupplyCalls(eoa, amount),
+        });
+        const preview = buildPreview(
+          "Earn",
+          `Deposit ${amount} USDC into Aave v3`,
+          [tx]
+        );
+        setPending({ preview, txs: [tx], run: onConfirmed });
+      } catch (e) {
+        setError(errMsg(e));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [eoa]
+  );
+
+  // Withdraw USDC (or the whole position) from Aave back to the spendable balance.
+  const prepareWithdraw = useCallback(
+    async (amount: string, max: boolean, onConfirmed: (hash: string) => void) => {
+      setError(null);
+      setBusy(true);
+      try {
+        const ua = uaRef.current;
+        if (!ua || !eoa) throw new Error("Session not ready");
+        if (!max && !(Number(amount) > 0)) throw new Error("Enter an amount");
+        const tx = await ua.createUniversalTransaction({
+          chainId: SETTLEMENT_CHAIN_ID,
+          expectTokens: [],
+          transactions: buildWithdrawCalls(eoa, amount, max),
+        });
+        const preview = buildPreview(
+          "Withdraw",
+          max ? "Withdraw all USDC from Aave v3" : `Withdraw ${amount} USDC from Aave v3`,
+          [tx]
+        );
+        setPending({ preview, txs: [tx], run: onConfirmed });
+      } catch (e) {
+        setError(errMsg(e));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [eoa]
+  );
+
+  // Consolidate: convert scattered assets into USDC on Arbitrum in one move.
+  const prepareConsolidate = useCallback(
+    async (amount: string, onConfirmed: (hash: string) => void) => {
+      setError(null);
+      setBusy(true);
+      try {
+        const ua = uaRef.current;
+        if (!ua) throw new Error("Session not ready");
+        if (!(Number(amount) > 0)) throw new Error("Enter an amount");
+        const tx = await ua.createConvertTransaction({
+          chainId: SETTLEMENT_CHAIN_ID,
+          expectToken: { type: SUPPORTED_TOKEN_TYPE.USDC, amount },
+        });
+        const preview = buildPreview(
+          "Consolidate",
+          `Consolidate into ${amount} USDC on Arbitrum`,
+          [tx]
+        );
+        setPending({ preview, txs: [tx], run: onConfirmed });
+      } catch (e) {
+        setError(errMsg(e));
+      } finally {
+        setBusy(false);
+      }
+    },
+    []
+  );
+
   return {
     status,
     email,
     eoa,
     balanceUsd,
     assets,
+    earn,
     busy,
     error,
+    pending,
     setError,
     login,
     logout,
     refreshBalance,
+    refreshEarn,
     pay,
+    preparePay,
+    prepareEarn,
+    prepareWithdraw,
+    prepareConsolidate,
+    confirmPending,
+    cancelPending,
   };
+}
+
+// Distil one or more built transactions into a single human-readable preview by
+// aggregating their tokenChanges (sum fees/amounts, union the chains touched).
+function buildPreview(
+  action: string,
+  summary: string,
+  txs: ITransaction[]
+): TxPreview {
+  let payUsd = 0;
+  let receiveUsd = 0;
+  let feeUsd = 0;
+  let swaps = 0;
+  const from = new Set<number>();
+  const to = new Set<number>();
+  for (const tx of txs) {
+    const tc = tx.tokenChanges;
+    payUsd += num(tc?.totalDecrAmountInUSD);
+    receiveUsd += num(tc?.totalIncrAmountInUSD);
+    feeUsd += num(tc?.totalFeeInUSD);
+    swaps += tc?.swaps?.length ?? 0;
+    (tc?.fromChains ?? []).forEach((c) => from.add(c));
+    (tc?.toChains ?? []).forEach((c) => to.add(c));
+  }
+  return {
+    action,
+    summary,
+    payUsd,
+    receiveUsd,
+    feeUsd,
+    swaps,
+    fromChains: [...from],
+    toChains: [...to],
+  };
+}
+
+function num(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
 }
 
 function errMsg(e: unknown): string {

@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 // pay flow; deposits come from the cross-chain deposit SDK.
 export type ActivityEntry = {
   id: string;
-  kind: "sent" | "split" | "deposit";
+  kind: "sent" | "split" | "deposit" | "earn" | "withdraw" | "consolidate";
   amount: string; // USD, 2dp
   timestamp: number;
   /** number of recipients, for split/sent */
