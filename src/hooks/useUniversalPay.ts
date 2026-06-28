@@ -25,6 +25,9 @@ import {
 
 export type Recipient = { address: string; amount: string };
 
+// Where the unified balance physically lives, aggregated across every asset.
+export type ChainBalance = { chainId: number; amountInUSD: number };
+
 // A human-readable preview of what a Universal Account transaction will do,
 // distilled from ITransaction.tokenChanges — this is the chain-abstraction made
 // visible: which chains funded it, how many swaps, the fee, and that no native
@@ -71,6 +74,7 @@ export function useUniversalPay() {
   const [eoa, setEoa] = useState<string | null>(null);
   const [balanceUsd, setBalanceUsd] = useState<number | null>(null);
   const [assets, setAssets] = useState<TokenBalance[]>([]);
+  const [chainBalances, setChainBalances] = useState<ChainBalance[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
@@ -191,6 +195,8 @@ export function useUniversalPay() {
     setEoa(null);
     setEmail(null);
     setBalanceUsd(null);
+    setAssets([]);
+    setChainBalances([]);
     setEarn(null);
     setPending(null);
     setStatus("idle");
@@ -217,6 +223,24 @@ export function useUniversalPay() {
         .filter((r) => r.amountInUSD > 0 || r.amount > 0)
         .sort((a, b) => b.amountInUSD - a.amountInUSD);
       setAssets(rows);
+
+      // Aggregate every asset's per-chain holdings into one map so we can show
+      // where the unified balance physically lives — the fragmentation that the
+      // Universal Account abstracts away into a single number.
+      const byChain = new Map<number, number>();
+      for (const a of res.assets ?? []) {
+        for (const c of a.chainAggregation ?? []) {
+          const id = Number(c.token?.chainId);
+          const usd = Number(c.amountInUSD ?? 0);
+          if (!id || !(usd > 0)) continue;
+          byChain.set(id, (byChain.get(id) ?? 0) + usd);
+        }
+      }
+      setChainBalances(
+        [...byChain.entries()]
+          .map(([chainId, amountInUSD]) => ({ chainId, amountInUSD }))
+          .sort((x, y) => y.amountInUSD - x.amountInUSD)
+      );
     } catch (e) {
       setError(errMsg(e));
     }
@@ -474,6 +498,7 @@ export function useUniversalPay() {
     eoa,
     balanceUsd,
     assets,
+    chainBalances,
     earn,
     busy,
     error,

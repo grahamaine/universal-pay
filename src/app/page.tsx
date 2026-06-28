@@ -286,6 +286,8 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
         onContacts={() => setSheet("contacts")}
       />
 
+      <UnderTheHood ua={ua} />
+
       {incoming && (
         <div className="flex items-start gap-3 rounded-2xl border border-indigo-500/30 bg-indigo-500/10 p-4 text-sm">
           <span className="text-lg">💸</span>
@@ -1014,6 +1016,16 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
   );
 }
 
+// getChainName (from the deposit SDK) covers the common chains; fall back to a
+// generic label for anything it doesn't recognise.
+function chainName(id: number): string {
+  try {
+    return getChainName(id) || `Chain ${id}`;
+  } catch {
+    return `Chain ${id}`;
+  }
+}
+
 function timeAgo(ts: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
   if (s < 60) return "just now";
@@ -1022,6 +1034,124 @@ function timeAgo(ts: number): string {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
   return new Date(ts).toLocaleDateString();
+}
+
+// Judge-facing "proof" panel: makes the EIP-7702 chain-abstraction concrete —
+// your address is your own EOA (no new wallet, no migration, no smart-account
+// deployment), and your one balance is physically spread across N chains that
+// the Universal Account unifies and sources from automatically.
+function UnderTheHood({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
+  const [open, setOpen] = useState(false);
+  const chains = ua.chainBalances;
+  const total = chains.reduce((s, c) => s + c.amountInUSD, 0) || 1;
+
+  return (
+    <section className="rounded-3xl border border-white/10 bg-white/[0.03]">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between px-5 py-4 text-left"
+      >
+        <div className="flex items-center gap-2.5">
+          <span className="grid h-7 w-7 place-items-center rounded-lg bg-indigo-500/15 text-sm text-indigo-300">
+            🔎
+          </span>
+          <div>
+            <h2 className="text-base font-medium text-white">Under the hood</h2>
+            <p className="text-xs text-zinc-500">
+              {chains.length > 0
+                ? `One balance across ${chains.length} chain${chains.length > 1 ? "s" : ""}`
+                : "How your chain-abstracted account works"}
+            </p>
+          </div>
+        </div>
+        <span className="text-xs text-zinc-500">{open ? "▲" : "▼"}</span>
+      </button>
+
+      {open && (
+        <div className="flex flex-col gap-4 border-t border-white/10 px-5 pb-5 pt-4">
+          <div className="flex flex-col gap-2.5 rounded-2xl bg-white/[0.03] p-4">
+            <ProofRow
+              label="Your address"
+              value={ua.eoa ? `${ua.eoa.slice(0, 6)}…${ua.eoa.slice(-4)}` : "—"}
+              hint="The same address you sign in with — not a new wallet"
+            />
+            <ProofRow
+              label="Account"
+              value="EOA upgraded via EIP-7702"
+              hint="Your existing account, upgraded in place"
+            />
+            <ProofRow
+              label="Migration"
+              value="None"
+              hint="No funds moved, no smart-account deployed"
+            />
+            <ProofRow label="Settlement" value="Arbitrum One" hint="Where transfers land" />
+          </div>
+
+          {chains.length > 0 ? (
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-400">
+                Where your money lives
+              </p>
+              <ul className="flex flex-col gap-2.5">
+                {chains.map((c) => (
+                  <li key={c.chainId} className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-zinc-300">{chainName(c.chainId)}</span>
+                      <span className="text-zinc-400">
+                        ${c.amountInUSD.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500"
+                        style={{ width: `${Math.max(4, (c.amountInUSD / total) * 100)}%` }}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 text-xs text-zinc-500">
+                The Universal Account unifies all of this into one spendable
+                balance — and sources from whichever chain it needs, automatically.
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-zinc-500">
+              Once funded, you&apos;ll see exactly which chains your assets sit on —
+              all spendable as one balance, with the Universal Account routing
+              liquidity for you.
+            </p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ProofRow({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
+  return (
+    <div className="flex items-start gap-2.5">
+      <span className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-emerald-500/20 text-[9px] text-emerald-300">
+        ✓
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-zinc-500">{label}</span>
+          <span className="text-right text-xs font-medium text-white">{value}</span>
+        </div>
+        {hint && <span className="text-[11px] text-zinc-600">{hint}</span>}
+      </div>
+    </div>
+  );
 }
 
 // Confirmation sheet that makes the chain-abstraction visible: before signing,
