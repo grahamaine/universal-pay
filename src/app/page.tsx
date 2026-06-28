@@ -23,6 +23,7 @@ import {
 import { TokenPicker } from "@/components/TokenPicker";
 import { useRequests } from "@/hooks/useRequests";
 import { RequestsCard } from "@/components/RequestsCard";
+import { GroupsCard } from "@/components/GroupsCard";
 import { SplashScreen } from "@/components/SplashScreen";
 import { FeatureSidebar } from "@/components/FeatureSidebar";
 
@@ -162,6 +163,10 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
   const [incoming, setIncoming] = useState<PayRequest | null>(null);
   const [token, setToken] = useState<SettlementToken>(DEFAULT_SETTLEMENT_TOKEN);
   const [sheet, setSheet] = useState<null | "receive" | "scan" | "contacts">(null);
+  // Share-based split state
+  const [splitMode, setSplitMode] = useState<"amount" | "share">("amount");
+  const [shares, setShares] = useState<Record<number, number>>({});
+  const [shareTotal, setShareTotal] = useState("");
   const activity = useActivity(ua.eoa);
   const contacts = useContacts(ua.eoa);
   const requests = useRequests(ua.eoa);
@@ -204,6 +209,18 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
       return rs.map((r) => ({ ...r, amount: each }));
     });
   }
+  // Compute each recipient's share-proportional amount (share mode only).
+  function computedShareAmounts(): string[] {
+    const total = Number(shareTotal);
+    if (!total) return recipients.map(() => "");
+    const totalShares = recipients.reduce((s, _, i) => s + (shares[i] ?? 1), 0);
+    return recipients.map((_, i) => {
+      const myShares = shares[i] ?? 1;
+      const amt = (total * myShares) / totalShares;
+      return token.stable ? amt.toFixed(2) : Number(amt.toFixed(6)).toString();
+    });
+  }
+
   function fillFirstEmpty(address: string, amount?: string) {
     setRecipients((rs) => {
       const i = rs.findIndex((r) => !r.address.trim());
@@ -217,7 +234,14 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
   async function handlePay() {
     ua.setError(null);
     try {
-      const res = await ua.pay(recipients, token);
+      const effectiveRecipients =
+        splitMode === "share" && isSplit
+          ? computedShareAmounts().map((amt, i) => ({
+              address: recipients[i].address,
+              amount: amt,
+            }))
+          : recipients;
+      const res = await ua.pay(effectiveRecipients, token);
       setResult(res);
       activity.add({
         id: res.txHash || `pay-${Date.now()}`,
@@ -280,11 +304,20 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
         onRemove={removeRecipient}
         onSplitEvenly={splitEvenly}
         onPay={handlePay}
+        splitMode={splitMode}
+        onSplitMode={setSplitMode}
+        shares={shares}
+        onShares={setShares}
+        shareTotal={shareTotal}
+        onShareTotal={setShareTotal}
+        shareAmounts={computedShareAmounts()}
       />
 
       {result && <SuccessCard result={result} onDismiss={() => setResult(null)} />}
 
       <RequestsCard requests={requests} ownerAddress={ua.eoa} />
+
+      <GroupsCard ua={ua} />
 
       <ActivityFeed entries={activity.entries} onClear={activity.clear} />
 
@@ -418,6 +451,13 @@ function SendCard({
   onRemove,
   onSplitEvenly,
   onPay,
+  splitMode,
+  onSplitMode,
+  shares,
+  onShares,
+  shareTotal,
+  onShareTotal,
+  shareAmounts,
 }: {
   recipients: Recipient[];
   isSplit: boolean;
@@ -432,8 +472,21 @@ function SendCard({
   onRemove: (i: number) => void;
   onSplitEvenly: (total: string) => void;
   onPay: () => void;
+  splitMode: "amount" | "share";
+  onSplitMode: (m: "amount" | "share") => void;
+  shares: Record<number, number>;
+  onShares: (s: Record<number, number>) => void;
+  shareTotal: string;
+  onShareTotal: (v: string) => void;
+  shareAmounts: string[];
 }) {
   const [splitTotal, setSplitTotal] = useState("");
+  const isShareMode = isSplit && splitMode === "share";
+
+  // Total line for share mode: sum of computed amounts
+  const shareSum = shareAmounts.reduce((s, a) => s + (Number(a) || 0), 0);
+  const shareSumStr = token.stable ? shareSum.toFixed(2) : Number(shareSum.toFixed(6)).toString();
+
   return (
     <section className="flex flex-col gap-3 rounded-3xl border border-white/10 bg-white/[0.03] p-5">
       <div className="flex items-center justify-between">
@@ -442,6 +495,23 @@ function SendCard({
         </h2>
         <TokenPicker token={token} onToken={onToken} />
       </div>
+
+      {/* Share-mode total input */}
+      {isShareMode && (
+        <div className="flex items-center gap-2 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-3 py-2.5">
+          <span className="text-xs text-indigo-300">Total bill</span>
+          <div className="flex flex-1 items-center justify-end gap-1">
+            <span className="text-xs text-zinc-500">{token.icon}</span>
+            <input
+              value={shareTotal}
+              onChange={(e) => onShareTotal(e.target.value)}
+              inputMode="decimal"
+              placeholder={token.stable ? "0.00" : "0.0"}
+              className="w-24 bg-transparent text-right text-sm font-semibold text-white outline-none"
+            />
+          </div>
+        </div>
+      )}
 
       {recipients.map((r, i) => {
         const known = contacts.find(r.address);
@@ -454,16 +524,35 @@ function SendCard({
                 placeholder="0x recipient address"
                 className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 font-mono text-xs text-white outline-none transition focus:border-indigo-500"
               />
-              <div className="flex items-center rounded-xl border border-white/10 bg-white/5 px-2">
-                <span className="text-xs text-zinc-500">{token.icon}</span>
-                <input
-                  value={r.amount}
-                  onChange={(e) => onUpdate(i, { amount: e.target.value })}
-                  inputMode="decimal"
-                  placeholder={token.stable ? "0.00" : "0.0"}
-                  className="w-16 bg-transparent px-1 py-2.5 text-right text-sm text-white outline-none"
-                />
-              </div>
+              {isShareMode ? (
+                /* Share count input — computed amount shown as hint */
+                <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-2">
+                  <span className="text-xs text-zinc-500">×</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={shares[i] ?? 1}
+                    onChange={(e) =>
+                      onShares({ ...shares, [i]: Number(e.target.value) || 1 })
+                    }
+                    className="w-10 bg-transparent py-2.5 text-center text-sm text-white outline-none"
+                  />
+                  <span className="text-xs text-zinc-500">
+                    {shareAmounts[i] ? `= ${shareAmounts[i]}` : "share"}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center rounded-xl border border-white/10 bg-white/5 px-2">
+                  <span className="text-xs text-zinc-500">{token.icon}</span>
+                  <input
+                    value={r.amount}
+                    onChange={(e) => onUpdate(i, { amount: e.target.value })}
+                    inputMode="decimal"
+                    placeholder={token.stable ? "0.00" : "0.0"}
+                    className="w-16 bg-transparent px-1 py-2.5 text-right text-sm text-white outline-none"
+                  />
+                </div>
+              )}
               {recipients.length > 1 && (
                 <button
                   onClick={() => onRemove(i)}
@@ -494,22 +583,50 @@ function SendCard({
 
         {isSplit && (
           <div className="flex items-center gap-1.5">
-            <div className="flex items-center rounded-lg border border-white/10 bg-white/5 px-2">
-              <span className="text-xs text-zinc-500">{token.icon}</span>
-              <input
-                value={splitTotal}
-                onChange={(e) => setSplitTotal(e.target.value)}
-                inputMode="decimal"
-                placeholder="total"
-                className="w-16 bg-transparent px-1 py-1.5 text-right text-xs text-white outline-none"
-              />
+            {/* Split-mode toggle */}
+            <div className="flex items-center gap-0.5 rounded-full border border-white/10 p-0.5 text-[11px]">
+              <button
+                onClick={() => onSplitMode("amount")}
+                className={`rounded-full px-2.5 py-1 font-medium transition ${
+                  splitMode === "amount"
+                    ? "bg-indigo-600 text-white"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                By amount
+              </button>
+              <button
+                onClick={() => onSplitMode("share")}
+                className={`rounded-full px-2.5 py-1 font-medium transition ${
+                  splitMode === "share"
+                    ? "bg-indigo-600 text-white"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                By share
+              </button>
             </div>
-            <button
-              onClick={() => onSplitEvenly(splitTotal)}
-              className="rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-white/20"
-            >
-              Split evenly
-            </button>
+
+            {splitMode === "amount" && (
+              <>
+                <div className="flex items-center rounded-lg border border-white/10 bg-white/5 px-2">
+                  <span className="text-xs text-zinc-500">{token.icon}</span>
+                  <input
+                    value={splitTotal}
+                    onChange={(e) => setSplitTotal(e.target.value)}
+                    inputMode="decimal"
+                    placeholder="total"
+                    className="w-16 bg-transparent px-1 py-1.5 text-right text-xs text-white outline-none"
+                  />
+                </div>
+                <button
+                  onClick={() => onSplitEvenly(splitTotal)}
+                  className="rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-white/20"
+                >
+                  Split evenly
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -519,7 +636,7 @@ function SendCard({
           Total {isSplit ? `· ${recipients.length} people` : ""}
         </span>
         <span className="font-semibold text-white">
-          {total} {token.symbol}
+          {isShareMode ? shareSumStr : total} {token.symbol}
         </span>
       </div>
 
@@ -530,7 +647,7 @@ function SendCard({
       >
         {busy
           ? "Sending…"
-          : `${isSplit ? "Split" : "Send"} ${total} ${token.symbol}`}
+          : `${isSplit ? "Split" : "Send"} ${isShareMode ? shareSumStr : total} ${token.symbol}`}
       </button>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
