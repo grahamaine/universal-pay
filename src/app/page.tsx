@@ -171,6 +171,11 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
   const contacts = useContacts(ua.eoa);
   const requests = useRequests(ua.eoa);
 
+  // Cross-chain funding lives at the dashboard level so the deposit modal can be
+  // opened from the quick-action, the empty-balance prompt, or the insufficient-
+  // balance nudge under the Send button — all funnel through one controller.
+  const deposit = useDepositController(ua.eoa, ua.refreshBalance, activity.add);
+
   // Honour an incoming "request money" link: ?to=…&amount=…&note=…&token=…
   useEffect(() => {
     const req = parsePayRequest(new URLSearchParams(window.location.search));
@@ -263,18 +268,21 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
     <div className="flex flex-col gap-5">
       <BalanceCard ua={ua} />
 
+      {ua.eoa && ua.balanceUsd === 0 && (
+        <FundCard
+          ready={deposit.isReady}
+          onAddFunds={deposit.open}
+          onReceive={() => setSheet("receive")}
+        />
+      )}
+
       <QuickActions
         ownerReady={!!ua.eoa}
+        depositReady={deposit.isReady}
+        onAddFunds={deposit.open}
         onReceive={() => setSheet("receive")}
         onScan={() => setSheet("scan")}
         onContacts={() => setSheet("contacts")}
-        depositSlot={
-          <DepositAction
-            ownerAddress={ua.eoa}
-            onCredited={ua.refreshBalance}
-            onRecord={activity.add}
-          />
-        }
       />
 
       {incoming && (
@@ -298,6 +306,9 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
         onToken={setToken}
         busy={ua.busy}
         error={ua.error}
+        balanceUsd={ua.balanceUsd}
+        depositReady={deposit.isReady}
+        onAddFunds={deposit.open}
         contacts={contacts}
         onUpdate={update}
         onAdd={addRecipient}
@@ -337,26 +348,38 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
         contacts={contacts}
         onPick={(addr) => fillFirstEmpty(addr)}
       />
+      <DepositModal
+        isOpen={deposit.modalOpen}
+        onClose={deposit.close}
+        theme="dark"
+      />
     </div>
   );
 }
 
 function QuickActions({
   ownerReady,
+  depositReady,
+  onAddFunds,
   onReceive,
   onScan,
   onContacts,
-  depositSlot,
 }: {
   ownerReady: boolean;
+  depositReady: boolean;
+  onAddFunds: () => void;
   onReceive: () => void;
   onScan: () => void;
   onContacts: () => void;
-  depositSlot: React.ReactNode;
 }) {
   return (
     <div className="grid grid-cols-4 gap-2">
-      {depositSlot}
+      <ActionButton
+        icon="+"
+        label={depositReady ? "Add funds" : "…"}
+        onClick={onAddFunds}
+        disabled={!depositReady}
+      />
       <ActionButton icon="↓" label="Get paid" onClick={onReceive} disabled={!ownerReady} />
       <ActionButton icon="⌗" label="Scan" onClick={onScan} />
       <ActionButton icon="☆" label="Contacts" onClick={onContacts} />
@@ -389,21 +412,19 @@ function ActionButton({
   );
 }
 
-// The deposit hook lives here so it can sit inside the QuickActions row while
-// still listening for completed cross-chain deposits to refresh balance + log.
-function DepositAction({
-  ownerAddress,
-  onCredited,
-  onRecord,
-}: {
-  ownerAddress: string | null;
-  onCredited: () => void;
-  onRecord: (entry: Omit<ActivityEntry, "timestamp">) => void;
-}) {
+// Single controller for cross-chain funding: owns the deposit modal's open
+// state and listens for completed deposits to refresh balance + log activity.
+// Lifted out of the quick-action button so the empty-balance prompt and the
+// insufficient-balance nudge can all open the same modal.
+function useDepositController(
+  ownerAddress: string | null,
+  onCredited: () => void,
+  onRecord: (entry: Omit<ActivityEntry, "timestamp">) => void
+) {
   const { isReady, recentActivity } = useDeposit({
     ownerAddress: ownerAddress ?? undefined,
   });
-  const [open, setOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
 
   const completed = recentActivity.filter((a) => a.type === "complete");
   const completedCount = completed.length;
@@ -424,16 +445,57 @@ function DepositAction({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completedCount, onCredited, onRecord]);
 
+  return {
+    isReady,
+    modalOpen,
+    open: () => setModalOpen(true),
+    close: () => setModalOpen(false),
+  };
+}
+
+// Empty-balance funding prompt — shown when a freshly-created account holds $0,
+// turning a bare "$0.00" into a clear next step for the user.
+function FundCard({
+  ready,
+  onAddFunds,
+  onReceive,
+}: {
+  ready: boolean;
+  onAddFunds: () => void;
+  onReceive: () => void;
+}) {
   return (
-    <>
-      <ActionButton
-        icon="+"
-        label={isReady ? "Add funds" : "…"}
-        onClick={() => setOpen(true)}
-        disabled={!isReady}
-      />
-      <DepositModal isOpen={open} onClose={() => setOpen(false)} theme="dark" />
-    </>
+    <section className="flex flex-col gap-3 rounded-3xl border border-indigo-500/30 bg-indigo-500/[0.07] p-5">
+      <div className="flex items-start gap-3">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-indigo-600/25 text-xl">
+          👋
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-base font-medium text-white">
+            Fund your account to get started
+          </h2>
+          <p className="mt-0.5 text-sm text-zinc-400">
+            Move crypto in from any chain or token — ETH, USDC, USDT and more.
+            It all lands as one spendable balance on Arbitrum.
+          </p>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <button
+          onClick={onAddFunds}
+          disabled={!ready}
+          className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+        >
+          {ready ? "Add funds" : "Preparing…"}
+        </button>
+        <button
+          onClick={onReceive}
+          className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.06]"
+        >
+          Show address
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -445,6 +507,9 @@ function SendCard({
   onToken,
   busy,
   error,
+  balanceUsd,
+  depositReady,
+  onAddFunds,
   contacts,
   onUpdate,
   onAdd,
@@ -466,6 +531,9 @@ function SendCard({
   onToken: (t: SettlementToken) => void;
   busy: boolean;
   error: string | null;
+  balanceUsd: number | null;
+  depositReady: boolean;
+  onAddFunds: () => void;
   contacts: ReturnType<typeof useContacts>;
   onUpdate: (i: number, patch: Partial<Recipient>) => void;
   onAdd: () => void;
@@ -486,6 +554,16 @@ function SendCard({
   // Total line for share mode: sum of computed amounts
   const shareSum = shareAmounts.reduce((s, a) => s + (Number(a) || 0), 0);
   const shareSumStr = token.stable ? shareSum.toFixed(2) : Number(shareSum.toFixed(6)).toString();
+
+  // Insufficient-balance nudge. We only compare for stable settlement tokens,
+  // where one token ≈ one dollar, so the amount is directly comparable to the
+  // USD balance without needing a live price for the volatile tokens.
+  const effectiveTotal = isShareMode ? shareSum : Number(total) || 0;
+  const insufficient =
+    token.stable &&
+    balanceUsd !== null &&
+    effectiveTotal > 0 &&
+    effectiveTotal > balanceUsd;
 
   return (
     <section className="flex flex-col gap-3 rounded-3xl border border-white/10 bg-white/[0.03] p-5">
@@ -640,14 +718,32 @@ function SendCard({
         </span>
       </div>
 
+      {insufficient && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs">
+          <span className="text-amber-200">
+            Short by {(effectiveTotal - (balanceUsd ?? 0)).toFixed(2)}{" "}
+            {token.symbol} — balance is ${(balanceUsd ?? 0).toFixed(2)}.
+          </span>
+          <button
+            onClick={onAddFunds}
+            disabled={!depositReady}
+            className="shrink-0 rounded-lg bg-amber-500/20 px-2.5 py-1 font-semibold text-amber-100 transition hover:bg-amber-500/30 disabled:opacity-50"
+          >
+            Add funds
+          </button>
+        </div>
+      )}
+
       <button
         onClick={onPay}
-        disabled={busy}
+        disabled={busy || insufficient}
         className="rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
       >
         {busy
           ? "Sending…"
-          : `${isSplit ? "Split" : "Send"} ${isShareMode ? shareSumStr : total} ${token.symbol}`}
+          : insufficient
+            ? "Insufficient balance"
+            : `${isSplit ? "Split" : "Send"} ${isShareMode ? shareSumStr : total} ${token.symbol}`}
       </button>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
