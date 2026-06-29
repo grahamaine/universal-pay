@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BrowserProvider, getBytes, type JsonRpcSigner } from "ethers";
+import {
+  BrowserProvider,
+  getBytes,
+  hashAuthorization,
+  Signature,
+  type JsonRpcSigner,
+} from "ethers";
 import {
   UniversalAccount,
   UNIVERSAL_ACCOUNT_VERSION,
@@ -22,6 +28,7 @@ import {
   readEarnPosition,
   type EarnPosition,
 } from "@/lib/defi";
+import { buildAuthorizations } from "@/lib/eip7702";
 
 export type Recipient = { address: string; amount: string };
 
@@ -246,24 +253,52 @@ export function useUniversalPay() {
     }
   }, []);
 
+  // Sign a built Universal Account transaction and broadcast it. This is the one
+  // place every send path funnels through, so the EIP-7702 authorization step
+  // below applies uniformly to transfers, splits, earn, withdraw and consolidate.
+  const signAndSend = useCallback(async (tx: ITransaction): Promise<string> => {
+    const ua = uaRef.current;
+    const signer = signerRef.current;
+    if (!ua || !signer) throw new Error("Session not ready");
+    const owner = await signer.getAddress();
+
+    // EIP-7702 delegation: on the first transaction from a fresh EOA (per chain)
+    // the relayer's userOps carry an `eip7702Auth` tuple that the EOA must sign
+    // to upgrade itself in place. It needs a RAW secp256k1 signature over the
+    // EIP-7702 digest — not a prefixed personal_sign, and not signer.authorize()
+    // (Magic's JsonRpcSigner throws UNSUPPORTED_OPERATION for it). We hash the
+    // tuple with ethers' hashAuthorization and sign the digest via eth_sign on
+    // Magic's provider, which is the only remote method that signs a raw hash.
+    // Once delegated, later userOps report eip7702Delegated and this is skipped.
+    const authorizations = await buildAuthorizations(tx.userOps, async (auth) => {
+      const digest = hashAuthorization({
+        address: auth.address,
+        nonce: auth.nonce,
+        chainId: auth.chainId,
+      });
+      const raw = (await signer.provider.send("eth_sign", [owner, digest])) as string;
+      return Signature.from(raw).serialized;
+    });
+
+    const signature = await signer.signMessage(getBytes(tx.rootHash));
+    const result = await ua.sendTransaction(tx, signature, authorizations);
+    return (result.transactionId ?? result.transactionHash) as string;
+  }, []);
+
   // Send a single chain-abstracted transfer that settles the chosen token on
   // Arbitrum. The UA auto-sources from whatever assets the sender holds.
   const sendOne = useCallback(
     async (to: string, amount: string, token: SettlementToken) => {
       const ua = uaRef.current;
-      const signer = signerRef.current;
-      if (!ua || !signer) throw new Error("Session not ready");
-
+      if (!ua) throw new Error("Session not ready");
       const tx = await ua.createTransferTransaction({
         token: { chainId: token.chainId, address: token.address },
         amount,
         receiver: to,
       });
-      const signature = await signer.signMessage(getBytes(tx.rootHash));
-      const result = await ua.sendTransaction(tx, signature);
-      return (result.transactionId ?? result.transactionHash) as string;
+      return signAndSend(tx);
     },
-    []
+    [signAndSend]
   );
 
   // Pay or split: one or many recipients, each settled in `token` on Arbitrum.
@@ -313,16 +348,6 @@ export function useUniversalPay() {
     }
   }, [eoa]);
 
-  // Sign a built Universal Account transaction and broadcast it.
-  const signAndSend = useCallback(async (tx: ITransaction): Promise<string> => {
-    const ua = uaRef.current;
-    const signer = signerRef.current;
-    if (!ua || !signer) throw new Error("Session not ready");
-    const signature = await signer.signMessage(getBytes(tx.rootHash));
-    const result = await ua.sendTransaction(tx, signature);
-    return (result.transactionId ?? result.transactionHash) as string;
-  }, []);
-
   // Confirm the pending action: sign + send each built tx in order, fire the
   // caller's side effects, then refresh balance + lending position.
   const confirmPending = useCallback(async (): Promise<string> => {
@@ -353,7 +378,10 @@ export function useUniversalPay() {
     async (
       recipients: Recipient[],
       token: SettlementToken,
-      onConfirmed: (res: PayResult) => void
+      onConfirmed: (res: PayResult) => void,
+      // Optional preview override — lets callers like the shopping cart label the
+      // confirm sheet "Checkout — Pay $X" instead of the default Send/Split copy.
+      opts?: { action?: string; summary?: string }
     ) => {
       setError(null);
       setBusy(true);
@@ -379,10 +407,11 @@ export function useUniversalPay() {
         const total = token.stable ? sum.toFixed(2) : trimNum(sum);
         const isSplit = valid.length > 1;
         const preview = buildPreview(
-          isSplit ? "Split" : "Send",
-          isSplit
-            ? `Split ${total} ${token.symbol} across ${valid.length} people`
-            : `Send ${total} ${token.symbol}`,
+          opts?.action ?? (isSplit ? "Split" : "Send"),
+          opts?.summary ??
+            (isSplit
+              ? `Split ${total} ${token.symbol} across ${valid.length} people`
+              : `Send ${total} ${token.symbol}`),
           txs
         );
         setPending({

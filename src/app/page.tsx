@@ -24,6 +24,8 @@ import {
 import { TokenPicker } from "@/components/TokenPicker";
 import { useRequests } from "@/hooks/useRequests";
 import { RequestsCard } from "@/components/RequestsCard";
+import { useCart } from "@/hooks/useCart";
+import { CartCard } from "@/components/CartCard";
 import { GroupsCard } from "@/components/GroupsCard";
 import { SplashScreen } from "@/components/SplashScreen";
 import { FeatureSidebar } from "@/components/FeatureSidebar";
@@ -171,6 +173,7 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
   const activity = useActivity(ua.eoa);
   const contacts = useContacts(ua.eoa);
   const requests = useRequests(ua.eoa);
+  const cart = useCart(ua.eoa);
 
   // Cross-chain funding lives at the dashboard level so the deposit modal can be
   // opened from the quick-action, the empty-balance prompt, or the insufficient-
@@ -328,6 +331,8 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
       />
 
       {result && <SuccessCard result={result} onDismiss={() => setResult(null)} />}
+
+      <CartCard ua={ua} cart={cart} onRecord={activity.add} />
 
       <EarnCard ua={ua} onRecord={activity.add} />
 
@@ -965,14 +970,18 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
       ? `Split with ${entry.recipients} people`
       : entry.kind === "sent"
         ? "Sent"
-        : entry.kind === "earn"
-          ? "Deposited to Earn"
-          : entry.kind === "withdraw"
-            ? "Withdrew from Earn"
-            : entry.kind === "consolidate"
-              ? "Consolidated to USDC"
-              : `Deposit${entry.chainId ? ` from ${getChainName(entry.chainId)}` : ""}`;
-  const icon = neutral ? "⇄" : incoming ? "↓" : "↑";
+        : entry.kind === "shop"
+          ? entry.label
+            ? `Paid · ${entry.label}`
+            : "Bills & Shopping"
+          : entry.kind === "earn"
+            ? "Deposited to Earn"
+            : entry.kind === "withdraw"
+              ? "Withdrew from Earn"
+              : entry.kind === "consolidate"
+                ? "Consolidated to USDC"
+                : `Deposit${entry.chainId ? ` from ${getChainName(entry.chainId)}` : ""}`;
+  const icon = entry.kind === "shop" ? "🛒" : neutral ? "⇄" : incoming ? "↓" : "↑";
 
   return (
     <li className="flex items-center justify-between gap-3 py-3">
