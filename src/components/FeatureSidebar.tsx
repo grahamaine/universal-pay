@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { FEATURES } from "@/lib/features";
 
 // Landing-page sidebar that showcases everything the app does. On large screens
@@ -11,7 +12,7 @@ export function FeatureSidebar() {
         <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-300">
           ⛓️ Powered by Particle × Magic · settles on Arbitrum
         </span>
-        <h2 className="mt-4 text-2xl font-semibold leading-tight tracking-tight text-white">
+        <h2 className="shimmer-text mt-4 text-2xl font-semibold leading-tight tracking-tight">
           One balance for every chain and token.
         </h2>
         <p className="mt-2 text-sm text-zinc-400">
@@ -24,10 +25,10 @@ export function FeatureSidebar() {
         {FEATURES.map((f, i) => (
           <li
             key={f.title}
-            className="rise-in flex items-start gap-3 rounded-2xl px-3 py-2.5 transition hover:bg-white/[0.04]"
+            className="feature-row rise-in flex items-start gap-3 rounded-2xl px-3 py-2.5"
             style={{ animationDelay: `${0.05 * i}s` }}
           >
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-indigo-600/15 text-lg">
+            <span className="feature-icon grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-indigo-600/15 text-lg">
               {f.icon}
             </span>
             <div className="min-w-0">
@@ -48,10 +49,40 @@ export function FeatureSidebar() {
 }
 
 function Stat({ value, label }: { value: string; label: string }) {
+  const count = useCountUp(value);
   return (
     <div className="flex-1">
-      <p className="text-xl font-semibold text-white">{value}</p>
+      <p className="text-xl font-semibold text-white">{count}</p>
       <p className="text-[11px] uppercase tracking-wide text-zinc-500">{label}</p>
     </div>
   );
+}
+
+// Counts a numeric stat up from 0 once, on mount — a small "the app is alive"
+// flourish for otherwise-static numbers. Non-numeric values pass through as-is.
+function useCountUp(target: string, durationMs = 900) {
+  const isNumeric = /^\d+$/.test(target);
+  const [display, setDisplay] = useState(isNumeric ? "0" : target);
+  const start = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!isNumeric) return;
+    const targetNum = Number(target);
+    if (targetNum === 0) {
+      setDisplay("0");
+      return;
+    }
+    let frame: number;
+    const step = (t: number) => {
+      if (start.current === null) start.current = t;
+      const progress = Math.min((t - start.current) / durationMs, 1);
+      setDisplay(String(Math.round(progress * targetNum)));
+      if (progress < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
+
+  return display;
 }

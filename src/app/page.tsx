@@ -29,6 +29,8 @@ import { CartCard } from "@/components/CartCard";
 import { GroupsCard } from "@/components/GroupsCard";
 import { SplashScreen } from "@/components/SplashScreen";
 import { FeatureSidebar } from "@/components/FeatureSidebar";
+import { AuroraBackground } from "@/components/AuroraBackground";
+import { TickerStrip } from "@/components/TickerStrip";
 
 export default function Home() {
   const ua = useUniversalPay();
@@ -68,8 +70,10 @@ function Landing({
   onLogin: (email: string) => void;
 }) {
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-5 py-8 lg:py-12">
-      <Header />
+    <main className="relative mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-5 py-8 lg:py-12">
+      <AuroraBackground />
+      <Header animatedLogo />
+      <TickerStrip />
       <div className="grid flex-1 items-start gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
         <FeatureSidebar />
         <div className="rise-in" style={{ animationDelay: "0.15s" }}>
@@ -85,11 +89,21 @@ function Landing({
   );
 }
 
-function Header() {
+function Header({ animatedLogo = false }: { animatedLogo?: boolean }) {
   return (
     <header className="flex items-center gap-3">
-      <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-lg font-bold text-white shadow-lg shadow-indigo-900/40">
-        U
+      <div className="relative grid h-10 w-10 shrink-0 place-items-center">
+        {animatedLogo && (
+          <>
+            <span className="orbit-ring absolute inset-[-6px] rounded-full border border-dashed border-indigo-400/30" />
+            <span className="orbit-ring-rev absolute -inset-2">
+              <span className="absolute right-0 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-violet-400 shadow-[0_0_8px_2px_rgba(167,139,250,0.6)]" />
+            </span>
+          </>
+        )}
+        <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-lg font-bold text-white shadow-lg shadow-indigo-900/40">
+          U
+        </div>
       </div>
       <div>
         <h1 className="text-xl font-semibold tracking-tight text-white">
@@ -149,7 +163,7 @@ function Login({
       <button
         type="submit"
         disabled={busy}
-        className="rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+        className="btn-shine rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
       >
         {busy ? "Setting up your account…" : "Continue with email"}
       </button>
