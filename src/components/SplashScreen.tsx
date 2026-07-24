@@ -26,7 +26,7 @@ export function SplashScreen() {
       className="splash-root fixed inset-0 z-50 grid place-items-center"
       style={{
         background:
-          "radial-gradient(50rem 40rem at 50% 30%, rgba(99,102,241,0.25), transparent 60%), #07070b",
+          "radial-gradient(50rem 40rem at 50% 30%, rgba(99,102,241,0.16), transparent 60%), #faf7f1",
       }}
       aria-hidden
     >
@@ -38,10 +38,10 @@ export function SplashScreen() {
           </span>
         </div>
         <div className="rise-in text-center" style={{ animationDelay: "0.4s" }}>
-          <h1 className="text-2xl font-semibold tracking-tight text-white">
+          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
             Universal Pay
           </h1>
-          <p className="mt-1 text-sm text-zinc-400">
+          <p className="mt-1 text-sm text-zinc-600">
             Any chain · any token · one balance
           </p>
         </div>

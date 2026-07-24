@@ -13,7 +13,8 @@
 //
 // Kept free of any `@particle-network/*` import so it stays SSR-safe (the UA SDK
 // is browser-only) — only ethers, which is isomorphic.
-import { Signature } from "ethers";
+import { getAddress, JsonRpcProvider, Signature } from "ethers";
+import { BASE_CHAIN_ID, BASE_RPC } from "./constants";
 
 // Matches the SDK's EIP7702Authorization ({ userOpHash, signature }).
 export type EIP7702Authorization = { userOpHash: string; signature: string };
@@ -62,6 +63,34 @@ export async function buildAuthorizations(
   }
 
   return authorizations;
+}
+
+// On-chain proof of the upgrade: after an EIP-7702 delegation lands, the EOA's
+// account code becomes the designator 0xef0100 ‖ <20-byte implementation>.
+export type DelegationStatus = {
+  delegated: boolean;
+  /** The smart-account implementation the EOA now points at, when delegated. */
+  implementation: string | null;
+};
+
+// Read whether `eoa` has been upgraded (delegated) on a chain by inspecting its
+// account code over a plain RPC — independent of the Magic signer's provider.
+export async function readDelegation(
+  eoa: string,
+  chainId: number,
+  rpc: string
+): Promise<DelegationStatus> {
+  const provider = new JsonRpcProvider(rpc, chainId);
+  const code = (await provider.getCode(eoa)).toLowerCase();
+  // 0x + ef0100 + 20 bytes = 48 hex chars total.
+  if (code.startsWith("0xef0100") && code.length === 48) {
+    return { delegated: true, implementation: getAddress("0x" + code.slice(8)) };
+  }
+  return { delegated: false, implementation: null };
+}
+
+export async function readBaseDelegation(eoa: string): Promise<DelegationStatus> {
+  return readDelegation(eoa, BASE_CHAIN_ID, BASE_RPC);
 }
 
 // Normalise a raw eth_sign result into the serialized form the relayer expects.

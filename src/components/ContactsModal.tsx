@@ -33,20 +33,20 @@ export function ContactsModal({
   return (
     <Modal open={open} onClose={onClose} title="Contacts">
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-2 rounded-2xl border border-white/10 p-3">
+        <div className="flex flex-col gap-2 rounded-2xl border border-zinc-900/10 p-3">
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Name"
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none"
+            className="rounded-xl border border-zinc-900/10 bg-zinc-900/5 px-3 py-2.5 text-sm text-zinc-900 outline-none"
           />
           <input
             value={address}
             onChange={(e) => setAddress(e.target.value)}
             placeholder="0x address"
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 font-mono text-xs text-white outline-none"
+            className="rounded-xl border border-zinc-900/10 bg-zinc-900/5 px-3 py-2.5 font-mono text-xs text-zinc-900 outline-none"
           />
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-red-600">{error}</p>}
           <button
             onClick={add}
             className="rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500"
@@ -60,7 +60,7 @@ export function ContactsModal({
             No saved contacts yet.
           </p>
         ) : (
-          <ul className="flex max-h-64 flex-col divide-y divide-white/5 overflow-y-auto">
+          <ul className="flex max-h-64 flex-col divide-y divide-zinc-900/5 overflow-y-auto">
             {contacts.contacts.map((c) => (
               <li key={c.address} className="flex items-center justify-between gap-2 py-2.5">
                 <button
@@ -70,11 +70,11 @@ export function ContactsModal({
                   }}
                   className="flex min-w-0 flex-1 items-center gap-3 text-left"
                 >
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-indigo-600/20 text-sm font-semibold text-indigo-300">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-indigo-600/20 text-sm font-semibold text-indigo-600">
                     {c.name.slice(0, 1).toUpperCase()}
                   </span>
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium text-white">
+                    <span className="block truncate text-sm font-medium text-zinc-900">
                       {c.name}
                     </span>
                     <span className="block truncate font-mono text-xs text-zinc-500">
@@ -84,7 +84,7 @@ export function ContactsModal({
                 </button>
                 <button
                   onClick={() => contacts.remove(c.address)}
-                  className="shrink-0 text-zinc-500 hover:text-red-400"
+                  className="shrink-0 text-zinc-500 hover:text-red-600"
                   aria-label={`Remove ${c.name}`}
                 >
                   ✕

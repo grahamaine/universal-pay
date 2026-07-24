@@ -56,12 +56,12 @@ export function RequestsCard({
   const pending = requests.requests.filter((r) => r.status === "pending");
 
   return (
-    <section className="flex flex-col gap-3 rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+    <section className="flex flex-col gap-3 rounded-3xl border border-zinc-900/10 bg-white/70 p-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-medium text-white">Requests</h2>
+        <h2 className="text-base font-medium text-zinc-900">Requests</h2>
         <div className="flex items-center gap-2">
           {pending.length > 0 && (
-            <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs text-amber-300">
+            <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs text-amber-600">
               {requests.pendingTotal.toFixed(2)} owed · {pending.length}
             </span>
           )}
@@ -75,16 +75,16 @@ export function RequestsCard({
       </div>
 
       {open && (
-        <div className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.02] p-3">
+        <div className="flex flex-col gap-2 rounded-2xl border border-zinc-900/10 bg-white/50 p-3">
           <div className="flex items-center gap-2">
-            <div className="flex flex-1 items-center rounded-xl border border-white/10 bg-white/5 px-2">
+            <div className="flex flex-1 items-center rounded-xl border border-zinc-900/10 bg-zinc-900/5 px-2">
               <span className="text-xs text-zinc-500">{token.icon}</span>
               <input
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 inputMode="decimal"
                 placeholder={token.stable ? "0.00" : "0.0"}
-                className="w-full bg-transparent px-2 py-2.5 text-sm text-white outline-none"
+                className="w-full bg-transparent px-2 py-2.5 text-sm text-zinc-900 outline-none"
               />
             </div>
             <TokenPicker token={token} onToken={setToken} />
@@ -93,13 +93,13 @@ export function RequestsCard({
             value={from}
             onChange={(e) => setFrom(e.target.value)}
             placeholder="From (name or address) — optional"
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-indigo-500"
+            className="rounded-xl border border-zinc-900/10 bg-zinc-900/5 px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-indigo-500"
           />
           <input
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="What's it for? — optional"
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-indigo-500"
+            className="rounded-xl border border-zinc-900/10 bg-zinc-900/5 px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-indigo-500"
           />
           <button
             onClick={create}
@@ -172,14 +172,14 @@ function RequestRow({
   }
 
   return (
-    <li className="rounded-2xl border border-white/10 bg-white/[0.02] p-3">
+    <li className="rounded-2xl border border-zinc-900/10 bg-white/50 p-3">
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="flex items-center gap-1.5 text-sm font-medium text-white">
-            <span className="text-indigo-300">{icon}</span>
+          <p className="flex items-center gap-1.5 text-sm font-medium text-zinc-900">
+            <span className="text-indigo-600">{icon}</span>
             {r.amount} {r.token}
             {paid && (
-              <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-300">
+              <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-600">
                 paid
               </span>
             )}
@@ -192,7 +192,7 @@ function RequestRow({
         <div className="flex shrink-0 items-center gap-1.5 text-xs">
           <button
             onClick={() => setShow((v) => !v)}
-            className="rounded-lg bg-white/5 px-2 py-1 text-zinc-300 hover:bg-white/10"
+            className="rounded-lg bg-zinc-900/5 px-2 py-1 text-zinc-700 hover:bg-zinc-900/10"
           >
             {show ? "Hide" : "Link"}
           </button>
@@ -200,15 +200,15 @@ function RequestRow({
             onClick={() => onMark(paid ? "pending" : "paid")}
             className={`rounded-lg px-2 py-1 ${
               paid
-                ? "bg-white/5 text-zinc-400 hover:bg-white/10"
-                : "bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30"
+                ? "bg-zinc-900/5 text-zinc-600 hover:bg-zinc-900/10"
+                : "bg-emerald-600/20 text-emerald-600 hover:bg-emerald-600/30"
             }`}
           >
             {paid ? "Undo" : "Mark paid"}
           </button>
           <button
             onClick={onRemove}
-            className="rounded-lg px-1.5 py-1 text-zinc-500 hover:text-red-400"
+            className="rounded-lg px-1.5 py-1 text-zinc-500 hover:text-red-600"
             aria-label="delete request"
           >
             ✕
@@ -223,7 +223,7 @@ function RequestRow({
             <input
               readOnly
               value={link}
-              className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-[11px] text-zinc-400 outline-none"
+              className="min-w-0 flex-1 rounded-lg border border-zinc-900/10 bg-zinc-900/5 px-2 py-1.5 text-[11px] text-zinc-600 outline-none"
             />
             <button
               onClick={copy}
@@ -233,7 +233,7 @@ function RequestRow({
             </button>
             <button
               onClick={share}
-              className="rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-white/20"
+              className="rounded-lg bg-zinc-900/10 px-2.5 py-1.5 text-xs font-medium text-zinc-900 hover:bg-zinc-900/15"
             >
               Share
             </button>

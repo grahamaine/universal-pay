@@ -41,9 +41,9 @@ export function GroupsCard({
   const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
-    <section className="flex flex-col gap-3 rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+    <section className="flex flex-col gap-3 rounded-3xl border border-zinc-900/10 bg-white/70 p-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-medium text-white">Groups &amp; Settle-up</h2>
+        <h2 className="text-base font-medium text-zinc-900">Groups &amp; Settle-up</h2>
         <button
           onClick={() => setCreating((v) => !v)}
           className="rounded-full bg-indigo-600 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-500"
@@ -111,12 +111,12 @@ function CreateGroupForm({
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.02] p-3">
+    <div className="flex flex-col gap-2 rounded-2xl border border-zinc-900/10 bg-white/50 p-3">
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="Group name (e.g. Trip to NYC)"
-        className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-indigo-500"
+        className="rounded-xl border border-zinc-900/10 bg-zinc-900/5 px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-indigo-500"
       />
       <p className="text-xs text-zinc-500">Members (at least 2)</p>
       {rows.map((r, i) => (
@@ -125,18 +125,18 @@ function CreateGroupForm({
             value={r.address}
             onChange={(e) => updateRow(i, { address: e.target.value })}
             placeholder="0x address"
-            className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 font-mono text-xs text-white outline-none focus:border-indigo-500"
+            className="min-w-0 flex-1 rounded-xl border border-zinc-900/10 bg-zinc-900/5 px-3 py-2 font-mono text-xs text-zinc-900 outline-none focus:border-indigo-500"
           />
           <input
             value={r.name ?? ""}
             onChange={(e) => updateRow(i, { name: e.target.value })}
             placeholder="Name"
-            className="w-24 rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-xs text-white outline-none focus:border-indigo-500"
+            className="w-24 rounded-xl border border-zinc-900/10 bg-zinc-900/5 px-2 py-2 text-xs text-zinc-900 outline-none focus:border-indigo-500"
           />
           {i >= 2 && (
             <button
               onClick={() => setRows((prev) => prev.filter((_, idx) => idx !== i))}
-              className="text-zinc-500 hover:text-red-400"
+              className="text-zinc-500 hover:text-red-600"
             >
               ✕
             </button>
@@ -145,7 +145,7 @@ function CreateGroupForm({
       ))}
       <button
         onClick={() => setRows((prev) => [...prev, { address: "", name: "" }])}
-        className="self-start text-xs text-indigo-400 hover:text-indigo-300"
+        className="self-start text-xs text-indigo-600 hover:text-indigo-600"
       >
         + Add member
       </button>
@@ -185,13 +185,13 @@ function GroupRow({
   const allSettled = settleUp.length === 0 && group.expenses.length > 0;
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.02]">
+    <div className="rounded-2xl border border-zinc-900/10 bg-white/50">
       <button
         onClick={onToggle}
         className="flex w-full items-center justify-between px-4 py-3 text-left"
       >
         <div>
-          <span className="font-medium text-white">{group.name}</span>
+          <span className="font-medium text-zinc-900">{group.name}</span>
           <span className="ml-2 text-xs text-zinc-500">
             {group.members.length} members · {group.expenses.length} expense
             {group.expenses.length !== 1 ? "s" : ""}
@@ -199,12 +199,12 @@ function GroupRow({
         </div>
         <div className="flex items-center gap-2">
           {allSettled && (
-            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-300">
+            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-600">
               settled
             </span>
           )}
           {settleUp.length > 0 && (
-            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-300">
+            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-600">
               {settleUp.length} to settle
             </span>
           )}
@@ -213,10 +213,10 @@ function GroupRow({
       </button>
 
       {expanded && (
-        <div className="flex flex-col gap-4 border-t border-white/10 px-4 pb-4 pt-3">
+        <div className="flex flex-col gap-4 border-t border-zinc-900/10 px-4 pb-4 pt-3">
           {/* Expenses */}
           <div>
-            <p className="mb-2 text-xs font-medium text-zinc-400 uppercase tracking-wide">
+            <p className="mb-2 text-xs font-medium text-zinc-600 uppercase tracking-wide">
               Expenses
             </p>
             {group.expenses.length === 0 ? (
@@ -229,7 +229,7 @@ function GroupRow({
                     className="flex items-center justify-between text-xs"
                   >
                     <div className="min-w-0">
-                      <span className="text-white">{exp.description}</span>
+                      <span className="text-zinc-900">{exp.description}</span>
                       <span className="ml-1.5 text-zinc-500">
                         {exp.amount} {exp.tokenSymbol} paid by{" "}
                         {label(exp.paidBy, group.members)}
@@ -237,7 +237,7 @@ function GroupRow({
                     </div>
                     <button
                       onClick={() => onRemoveExpense(exp.id)}
-                      className="ml-2 shrink-0 text-zinc-600 hover:text-red-400"
+                      className="ml-2 shrink-0 text-zinc-400 hover:text-red-600"
                     >
                       ✕
                     </button>
@@ -253,21 +253,21 @@ function GroupRow({
           {/* Balances */}
           {group.expenses.length > 0 && (
             <div>
-              <p className="mb-2 text-xs font-medium text-zinc-400 uppercase tracking-wide">
+              <p className="mb-2 text-xs font-medium text-zinc-600 uppercase tracking-wide">
                 Balances
               </p>
               <ul className="flex flex-col gap-1">
                 {balances.map((b) => (
                   <li key={b.address} className="flex items-center justify-between text-xs">
-                    <span className="text-zinc-300">
+                    <span className="text-zinc-700">
                       {b.name ?? short(b.address)}
                     </span>
                     <span
                       className={
                         b.net > 0.005
-                          ? "text-emerald-400"
+                          ? "text-emerald-600"
                           : b.net < -0.005
-                          ? "text-red-400"
+                          ? "text-red-600"
                           : "text-zinc-500"
                       }
                     >
@@ -286,7 +286,7 @@ function GroupRow({
           {/* Settle-up */}
           {settleUp.length > 0 && (
             <div>
-              <p className="mb-2 text-xs font-medium text-zinc-400 uppercase tracking-wide">
+              <p className="mb-2 text-xs font-medium text-zinc-600 uppercase tracking-wide">
                 Settle up
               </p>
               <ul className="flex flex-col gap-2">
@@ -304,7 +304,7 @@ function GroupRow({
 
           <button
             onClick={onRemoveGroup}
-            className="self-start text-xs text-zinc-600 hover:text-red-400"
+            className="self-start text-xs text-zinc-400 hover:text-red-600"
           >
             Delete group
           </button>
@@ -362,27 +362,27 @@ function AddExpenseForm({
       {!open ? (
         <button
           onClick={() => setOpen(true)}
-          className="text-xs font-medium text-indigo-400 hover:text-indigo-300"
+          className="text-xs font-medium text-indigo-600 hover:text-indigo-600"
         >
           + Add expense
         </button>
       ) : (
-        <div className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+        <div className="flex flex-col gap-2 rounded-xl border border-zinc-900/10 bg-white/50 p-3">
           <input
             value={desc}
             onChange={(e) => setDesc(e.target.value)}
             placeholder="What was it for?"
-            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
+            className="rounded-lg border border-zinc-900/10 bg-zinc-900/5 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-indigo-500"
           />
           <div className="flex items-center gap-2">
-            <div className="flex flex-1 items-center rounded-lg border border-white/10 bg-white/5 px-2">
+            <div className="flex flex-1 items-center rounded-lg border border-zinc-900/10 bg-zinc-900/5 px-2">
               <span className="text-xs text-zinc-500">{token.icon}</span>
               <input
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 inputMode="decimal"
                 placeholder={token.stable ? "0.00" : "0.0"}
-                className="w-full bg-transparent px-2 py-2 text-sm text-white outline-none"
+                className="w-full bg-transparent px-2 py-2 text-sm text-zinc-900 outline-none"
               />
             </div>
             <TokenPicker token={token} onToken={setToken} />
@@ -393,7 +393,7 @@ function AddExpenseForm({
             <select
               value={paidBy}
               onChange={(e) => setPaidBy(e.target.value)}
-              className="rounded-lg border border-white/10 bg-zinc-900 px-2 py-2 text-xs text-white outline-none"
+              className="rounded-lg border border-zinc-900/10 bg-white px-2 py-2 text-xs text-zinc-900 outline-none"
             >
               {group.members.map((m) => (
                 <option key={m.address} value={m.address}>
@@ -406,13 +406,13 @@ function AddExpenseForm({
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
               <p className="text-xs text-zinc-500">Split among</p>
-              <div className="flex items-center gap-1 rounded-full border border-white/10 p-0.5 text-[10px]">
+              <div className="flex items-center gap-1 rounded-full border border-zinc-900/10 p-0.5 text-[10px]">
                 <button
                   onClick={() => setSplitMode("equal")}
                   className={`rounded-full px-2 py-0.5 font-medium transition ${
                     splitMode === "equal"
                       ? "bg-indigo-600 text-white"
-                      : "text-zinc-400 hover:text-white"
+                      : "text-zinc-600 hover:text-zinc-900"
                   }`}
                 >
                   Equal
@@ -422,7 +422,7 @@ function AddExpenseForm({
                   className={`rounded-full px-2 py-0.5 font-medium transition ${
                     splitMode === "share"
                       ? "bg-indigo-600 text-white"
-                      : "text-zinc-400 hover:text-white"
+                      : "text-zinc-600 hover:text-zinc-900"
                   }`}
                 >
                   By share
@@ -437,11 +437,11 @@ function AddExpenseForm({
                   onChange={() => toggleMember(m.address)}
                   className="accent-indigo-500"
                 />
-                <span className="flex-1 text-xs text-zinc-300">
+                <span className="flex-1 text-xs text-zinc-700">
                   {m.name ?? short(m.address)}
                 </span>
                 {splitMode === "share" && splitAmong.includes(m.address) && (
-                  <div className="flex items-center gap-1 text-xs text-zinc-400">
+                  <div className="flex items-center gap-1 text-xs text-zinc-600">
                     <span>×</span>
                     <input
                       type="number"
@@ -453,7 +453,7 @@ function AddExpenseForm({
                           [m.address]: Number(e.target.value) || 1,
                         }))
                       }
-                      className="w-10 rounded border border-white/10 bg-white/5 px-1 py-0.5 text-center text-white outline-none"
+                      className="w-10 rounded border border-zinc-900/10 bg-zinc-900/5 px-1 py-0.5 text-center text-zinc-900 outline-none"
                     />
                     <span>share{(shares[m.address] ?? 1) !== 1 ? "s" : ""}</span>
                   </div>
@@ -477,7 +477,7 @@ function AddExpenseForm({
             </button>
             <button
               onClick={() => setOpen(false)}
-              className="rounded-lg bg-white/5 px-3 py-2 text-xs text-zinc-400 hover:bg-white/10"
+              className="rounded-lg bg-zinc-900/5 px-3 py-2 text-xs text-zinc-600 hover:bg-zinc-900/10"
             >
               Cancel
             </button>
@@ -522,20 +522,20 @@ function SettleRow({
 
   return (
     <li className="flex items-center justify-between gap-2 text-xs">
-      <span className="text-zinc-300">
-        <span className={isMe ? "font-semibold text-white" : ""}>
+      <span className="text-zinc-700">
+        <span className={isMe ? "font-semibold text-zinc-900" : ""}>
           {label(tx.from, members)}
         </span>{" "}
         <span className="text-zinc-500">→</span>{" "}
         {label(tx.to, members)}{" "}
-        <span className="font-medium text-amber-300">
+        <span className="font-medium text-amber-600">
           {tx.amount.toFixed(2)} {token.symbol}
         </span>
       </span>
       {state === "done" ? (
-        <span className="text-emerald-400">✓ Sent</span>
+        <span className="text-emerald-600">✓ Sent</span>
       ) : state === "error" ? (
-        <span className="text-red-400" title={errMsg}>
+        <span className="text-red-600" title={errMsg}>
           Failed
         </span>
       ) : (

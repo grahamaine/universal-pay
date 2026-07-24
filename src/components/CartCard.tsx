@@ -75,11 +75,11 @@ export function CartCard({
   }
 
   return (
-    <section className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+    <section className="flex flex-col gap-4 rounded-3xl border border-zinc-900/10 bg-white/70 p-5">
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="flex items-center gap-2 text-base font-medium text-white">
-            <span className="grid h-7 w-7 place-items-center rounded-lg bg-indigo-500/15 text-sm text-indigo-300">
+          <h2 className="flex items-center gap-2 text-base font-medium text-zinc-900">
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-indigo-500/15 text-sm text-indigo-600">
               🛒
             </span>
             Bills &amp; Shopping
@@ -89,7 +89,7 @@ export function CartCard({
           </p>
         </div>
         {count > 0 && (
-          <span className="rounded-full bg-indigo-500/15 px-2.5 py-1 text-xs font-semibold text-indigo-300">
+          <span className="rounded-full bg-indigo-500/15 px-2.5 py-1 text-xs font-semibold text-indigo-600">
             {count} in cart
           </span>
         )}
@@ -104,7 +104,7 @@ export function CartCard({
             className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition ${
               cat === c
                 ? "bg-indigo-600 text-white"
-                : "border border-white/10 text-zinc-400 hover:text-white"
+                : "border border-zinc-900/10 text-zinc-600 hover:text-zinc-900"
             }`}
           >
             {c}
@@ -118,57 +118,57 @@ export function CartCard({
           <button
             key={m.key}
             onClick={() => add(m.key)}
-            className="flex items-center gap-2.5 rounded-2xl border border-white/10 bg-white/[0.02] p-2.5 text-left transition hover:border-indigo-500/40 hover:bg-white/[0.05]"
+            className="flex items-center gap-2.5 rounded-2xl border border-zinc-900/10 bg-white/50 p-2.5 text-left transition hover:border-indigo-500/40 hover:bg-white/80"
           >
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/5 text-lg">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-zinc-900/5 text-lg">
               {m.icon}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-white">
+              <span className="block truncate text-sm font-medium text-zinc-900">
                 {m.name}
               </span>
               <span className="block text-xs text-zinc-500">
                 ${m.price.toFixed(2)}
-                <span className="text-zinc-600"> {m.unit}</span>
+                <span className="text-zinc-400"> {m.unit}</span>
               </span>
             </span>
-            <span className="shrink-0 text-lg leading-none text-indigo-400">+</span>
+            <span className="shrink-0 text-lg leading-none text-indigo-600">+</span>
           </button>
         ))}
       </div>
 
       {/* Cart summary */}
       {lines.length > 0 ? (
-        <div className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+        <div className="flex flex-col gap-2 rounded-2xl border border-zinc-900/10 bg-white/70 p-3">
           {lines.map((l) => (
             <div key={l.merchant.key} className="flex items-center gap-2">
               <span className="text-base">{l.merchant.icon}</span>
-              <span className="min-w-0 flex-1 truncate text-sm text-zinc-200">
+              <span className="min-w-0 flex-1 truncate text-sm text-zinc-700">
                 {l.merchant.name}
               </span>
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => decrement(l.merchant.key)}
-                  className="grid h-6 w-6 place-items-center rounded-md bg-white/5 text-zinc-300 hover:bg-white/10"
+                  className="grid h-6 w-6 place-items-center rounded-md bg-zinc-900/5 text-zinc-700 hover:bg-zinc-900/10"
                   aria-label="decrease"
                 >
                   −
                 </button>
-                <span className="w-5 text-center text-sm text-white">{l.qty}</span>
+                <span className="w-5 text-center text-sm text-zinc-900">{l.qty}</span>
                 <button
                   onClick={() => add(l.merchant.key)}
-                  className="grid h-6 w-6 place-items-center rounded-md bg-white/5 text-zinc-300 hover:bg-white/10"
+                  className="grid h-6 w-6 place-items-center rounded-md bg-zinc-900/5 text-zinc-700 hover:bg-zinc-900/10"
                   aria-label="increase"
                 >
                   +
                 </button>
               </div>
-              <span className="w-16 text-right text-sm font-medium text-white">
+              <span className="w-16 text-right text-sm font-medium text-zinc-900">
                 ${l.subtotal.toFixed(2)}
               </span>
               <button
                 onClick={() => removeItem(l.merchant.key)}
-                className="text-zinc-500 hover:text-red-400"
+                className="text-zinc-500 hover:text-red-600"
                 aria-label="remove"
               >
                 ✕
@@ -176,13 +176,13 @@ export function CartCard({
             </div>
           ))}
 
-          <div className="mt-1 flex items-center justify-between border-t border-white/10 pt-2.5 text-sm">
-            <span className="text-zinc-400">Total · {count} item{count > 1 ? "s" : ""}</span>
-            <span className="font-semibold text-white">${total.toFixed(2)} USDC</span>
+          <div className="mt-1 flex items-center justify-between border-t border-zinc-900/10 pt-2.5 text-sm">
+            <span className="text-zinc-600">Total · {count} item{count > 1 ? "s" : ""}</span>
+            <span className="font-semibold text-zinc-900">${total.toFixed(2)} USDC</span>
           </div>
 
           {insufficient && (
-            <p className="text-xs text-amber-300">
+            <p className="text-xs text-amber-600">
               Short by ${(total - (ua.balanceUsd ?? 0)).toFixed(2)} — add funds to check out.
             </p>
           )}
@@ -201,18 +201,18 @@ export function CartCard({
             </button>
             <button
               onClick={clear}
-              className="rounded-xl border border-white/10 px-3 py-2.5 text-sm text-zinc-400 transition hover:text-white"
+              className="rounded-xl border border-zinc-900/10 px-3 py-2.5 text-sm text-zinc-600 transition hover:text-zinc-900"
             >
               Clear
             </button>
           </div>
-          <p className="text-[11px] text-zinc-600">
+          <p className="text-[11px] text-zinc-400">
             Demo: settles USDC on Arbitrum to your own account (no funds lost).
             Swap in a real merchant address to go live.
           </p>
         </div>
       ) : (
-        <p className="rounded-2xl border border-dashed border-white/10 px-4 py-3 text-center text-xs text-zinc-500">
+        <p className="rounded-2xl border border-dashed border-zinc-900/10 px-4 py-3 text-center text-xs text-zinc-500">
           Tap a service above to add it to your cart.
         </p>
       )}

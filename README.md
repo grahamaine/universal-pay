@@ -24,7 +24,7 @@ It targets three stackable prizes with one app:
 | Track | How we qualify |
 | --- | --- |
 | **Particle Universal Accounts (EIP-7702)** | `UniversalAccount` runs in 7702 mode (`useEIP7702: true`). The account *is* the user's EOA — proven in-app in the "Under the hood" panel. |
-| **Arbitrum** | Every transfer, deposit, and yield deposit settles on **Arbitrum One** (chainId `42161`). |
+| **Arbitrum** | Every transfer, deposit, and yield deposit settles on **Arbitrum One** (chainId `42161`) — and the app ships its **own contract deployed & source-verified on Arbitrum One**: [`UniversalPayReceipts`](https://arbiscan.io/address/0xF1d421e02d92D89f28AFdfAB3223E60644a36eCA#code). |
 | **Magic** | Email-OTP embedded-wallet login provides the EOA that gets upgraded. |
 
 ### The cross-chain operation, three ways
@@ -35,6 +35,21 @@ chain it sits on**, with no manual bridging and no native gas token required:
 - **Add funds** — cross-chain deposit consolidating any asset onto Arbitrum.
 - **Pay / Split** — transfers settle a chosen token on Arbitrum, auto-sourced cross-chain.
 - **Universal Earn** — supply into Aave v3 on Arbitrum, funded from assets on any chain.
+
+### Deployed on Arbitrum One
+
+The app's own on-chain component, **`UniversalPayReceipts`**, is deployed and
+source-verified on Arbitrum One:
+
+- **Contract:** [`0xF1d421e02d92D89f28AFdfAB3223E60644a36eCA`](https://arbiscan.io/address/0xF1d421e02d92D89f28AFdfAB3223E60644a36eCA#code)
+- **Source:** [`contracts/UniversalPayReceipts.sol`](contracts/UniversalPayReceipts.sol) (solc 0.8.28, MIT)
+- **What it does:** `payWithReceipt(token, to, amount, note)` pulls the ERC-20
+  payment from the payer, forwards it to the recipient in the same call, and
+  emits an indexed `Receipt` event — a verifiable on-chain record of every
+  Universal Pay payment. No owner, holds no funds, not upgradeable.
+- **Where to see it in-app:** linked in the footer of every page (with the full
+  address), and in the signed-in dashboard's **"Under the hood"** panel — both
+  link straight to the verified source on Arbiscan.
 
 ---
 
@@ -158,9 +173,12 @@ src/
 
 ## Status
 
-All core flows build and type-check clean. The DeFi flows (Earn / withdraw /
-consolidate) run against **mainnet** Aave and require a funded account; test with
-a small amount before relying on them.
+All core flows build and type-check clean, and the live deployment at
+[unify-ux.vercel.app](https://unify-ux.vercel.app) is current. The
+[`UniversalPayReceipts`](https://arbiscan.io/address/0xF1d421e02d92D89f28AFdfAB3223E60644a36eCA#code)
+contract is deployed and source-verified on Arbitrum One. The DeFi flows
+(Earn / withdraw / consolidate) run against **mainnet** Aave and require a
+funded account; test with a small amount before relying on them.
 
 ---
 

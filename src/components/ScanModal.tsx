@@ -58,9 +58,9 @@ export function ScanModal({
           <video ref={videoRef} className="h-full w-full object-cover" />
         </div>
         {error ? (
-          <p className="text-sm text-red-400">{error}</p>
+          <p className="text-sm text-red-600">{error}</p>
         ) : (
-          <p className="text-center text-sm text-zinc-400">
+          <p className="text-center text-sm text-zinc-600">
             Point your camera at an address or Universal Pay request QR.
           </p>
         )}

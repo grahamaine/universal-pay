@@ -62,13 +62,13 @@ export function ReceiveModal({
 
   return (
     <Modal open={open} onClose={onClose} title="Get paid">
-      <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-white/5 p-1">
+      <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-zinc-900/5 p-1">
         {(["receive", "request"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={`rounded-lg py-2 text-sm font-medium capitalize transition ${
-              tab === t ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-white"
+              tab === t ? "bg-indigo-600 text-white" : "text-zinc-600 hover:text-zinc-900"
             }`}
           >
             {t}
@@ -81,33 +81,33 @@ export function ReceiveModal({
 
         {tab === "request" && (
           <div className="flex w-full flex-col gap-2">
-            <div className="flex items-center rounded-xl border border-white/10 bg-white/5 px-3">
+            <div className="flex items-center rounded-xl border border-zinc-900/10 bg-zinc-900/5 px-3">
               <span className="text-sm text-zinc-500">$</span>
               <input
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 inputMode="decimal"
                 placeholder="0.00"
-                className="w-full bg-transparent px-2 py-2.5 text-sm text-white outline-none"
+                className="w-full bg-transparent px-2 py-2.5 text-sm text-zinc-900 outline-none"
               />
             </div>
             <input
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="What's it for? (optional)"
-              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none"
+              className="rounded-xl border border-zinc-900/10 bg-zinc-900/5 px-3 py-2.5 text-sm text-zinc-900 outline-none"
             />
           </div>
         )}
 
-        <p className="w-full break-all rounded-xl bg-white/5 px-3 py-2 text-center font-mono text-xs text-zinc-400">
+        <p className="w-full break-all rounded-xl bg-zinc-900/5 px-3 py-2 text-center font-mono text-xs text-zinc-600">
           {tab === "receive" ? address : link}
         </p>
 
         <div className="grid w-full grid-cols-2 gap-2">
           <button
             onClick={copy}
-            className="rounded-xl border border-white/10 py-3 text-sm font-semibold text-white hover:bg-white/5"
+            className="rounded-xl border border-zinc-900/10 py-3 text-sm font-semibold text-zinc-900 hover:bg-zinc-900/5"
           >
             {copied ? "Copied ✓" : "Copy"}
           </button>

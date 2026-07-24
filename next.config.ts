@@ -2,6 +2,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   turbopack: {
+    // The parent "UXmm Hackathon" folder has its own package-lock.json, which
+    // makes Next infer the workspace root one level up and breaks the React
+    // Client Manifest in dev. Pin the root to this app.
+    root: __dirname,
     resolveAlias: {
       // auth-core (via the deposit SDK) dynamically imports AWS Cognito
       // credential providers we never use; the real package pulls Node-only

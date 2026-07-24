@@ -62,3 +62,26 @@ export type TokenBalance = {
   amount: number;
   amountInUSD: number;
 };
+
+// UniversalX-style swap targets: the whole unified balance can be converted
+// into any of the SDK's primary token types via createConvertTransaction.
+// `key` doubles as the SDK's SUPPORTED_TOKEN_TYPE string value; `chainId` is
+// the chain the converted token lands on (Solana for SOL, BNB Chain for BNB,
+// everything else consolidates on Arbitrum alongside settlement).
+export type SwapTarget = {
+  key: string;
+  symbol: string;
+  name: string;
+  icon: string;
+  chainId: number;
+  stable: boolean;
+};
+
+export const SWAP_TARGETS: SwapTarget[] = [
+  { key: "usdc", symbol: "USDC", name: "USD Coin", icon: "$", chainId: 42161, stable: true },
+  { key: "usdt", symbol: "USDT", name: "Tether", icon: "₮", chainId: 42161, stable: true },
+  { key: "eth", symbol: "ETH", name: "Ethereum", icon: "Ξ", chainId: 42161, stable: false },
+  { key: "btc", symbol: "BTC", name: "Bitcoin", icon: "₿", chainId: 42161, stable: false },
+  { key: "bnb", symbol: "BNB", name: "BNB", icon: "B", chainId: 56, stable: false },
+  { key: "sol", symbol: "SOL", name: "Solana", icon: "◎", chainId: 101, stable: false },
+];

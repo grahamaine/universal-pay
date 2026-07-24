@@ -7,15 +7,18 @@ import { FEATURES } from "@/lib/features";
 // it sits beside the sign-in card; on mobile it stacks beneath it.
 export function FeatureSidebar() {
   return (
-    <aside className="rise-in flex flex-col gap-5 rounded-3xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur lg:sticky lg:top-8">
+    <aside className="rise-in flex flex-col gap-5 rounded-3xl border border-zinc-900/10 bg-white/70 p-6 backdrop-blur lg:sticky lg:top-8">
       <div>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-300">
-          ⛓️ Powered by Particle × Magic · settles on Arbitrum
-        </span>
-        <h2 className="shimmer-text mt-4 text-2xl font-semibold leading-tight tracking-tight">
-          One balance for every chain and token.
+        <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-indigo-600/80">
+          Chain-abstracted payments · Particle × Magic
+        </p>
+        <h2 className="mt-3 font-display text-[2rem] font-semibold leading-tight tracking-tight text-zinc-900">
+          One balance, every chain.{" "}
+          <span className="bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text italic text-transparent">
+            Pay in one tap.
+          </span>
         </h2>
-        <p className="mt-2 text-sm text-zinc-400">
+        <p className="mt-3 text-sm text-zinc-600">
           Sign in with an email and pay, split, request, or top up — without ever
           touching a seed phrase or thinking about networks.
         </p>
@@ -32,14 +35,14 @@ export function FeatureSidebar() {
               {f.icon}
             </span>
             <div className="min-w-0">
-              <p className="text-sm font-medium text-white">{f.title}</p>
+              <p className="text-sm font-medium text-zinc-900">{f.title}</p>
               <p className="text-xs leading-relaxed text-zinc-500">{f.desc}</p>
             </div>
           </li>
         ))}
       </ul>
 
-      <div className="flex items-center gap-4 border-t border-white/10 pt-4 text-center">
+      <div className="flex items-center gap-4 border-t border-zinc-900/10 pt-4 text-center">
         <Stat value="3" label="tokens" />
         <Stat value="0" label="seed phrases" />
         <Stat value="1" label="balance" />
@@ -52,7 +55,7 @@ function Stat({ value, label }: { value: string; label: string }) {
   const count = useCountUp(value);
   return (
     <div className="flex-1">
-      <p className="text-xl font-semibold text-white">{count}</p>
+      <p className="text-xl font-semibold text-zinc-900">{count}</p>
       <p className="text-[11px] uppercase tracking-wide text-zinc-500">{label}</p>
     </div>
   );

@@ -15,7 +15,13 @@ import {
   type ITransaction,
 } from "@particle-network/universal-account-sdk";
 import { getMagic, hasMagicKey } from "@/lib/magic";
-import { EXPLORER_TX, SETTLEMENT_CHAIN_ID } from "@/lib/constants";
+import {
+  BASE_CHAIN_ID,
+  DELEGATION_CHAINS,
+  EXPLORER_TX,
+  SETTLEMENT_CHAIN_ID,
+  SOLANA_ADDRESS_ENV,
+} from "@/lib/constants";
 import {
   DEFAULT_SETTLEMENT_TOKEN,
   tokenMeta,
@@ -28,7 +34,12 @@ import {
   readEarnPosition,
   type EarnPosition,
 } from "@/lib/defi";
-import { buildAuthorizations } from "@/lib/eip7702";
+import {
+  buildAuthorizations,
+  readDelegation,
+  type DelegationStatus,
+} from "@/lib/eip7702";
+import type { SwapTarget } from "@/lib/tokens";
 
 export type Recipient = { address: string; amount: string };
 
@@ -73,6 +84,38 @@ export type PayResult = {
   symbol: string;
 };
 
+// One row of the account's transaction history, normalized from the loosely
+// typed (any) getTransactions() response the UniversalX backend returns.
+export type UaTx = {
+  id: string;
+  tag: string;
+  statusLabel: string;
+  failed: boolean;
+  done: boolean;
+  /** USD moved out of the balance (0 when unknown). */
+  usd: number;
+  createdAt: number | null;
+};
+
+// UA_TRANSACTION_STATUS from the SDK, folded into user-facing labels.
+const TX_STATUS_LABEL: Record<number, string> = {
+  0: "Initializing",
+  1: "Depositing",
+  2: "Depositing",
+  3: "Refund pending",
+  4: "Executing",
+  5: "Executing",
+  6: "Failed",
+  7: "Completed",
+  8: "Refunding",
+  9: "Refunding",
+  10: "Refund failed",
+  11: "Refunded",
+  12: "Processing",
+  13: "Processing",
+  14: "Failed",
+};
+
 type Status = "idle" | "loading" | "ready";
 
 export function useUniversalPay() {
@@ -86,9 +129,94 @@ export function useUniversalPay() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [earn, setEarn] = useState<EarnPosition | null>(null);
+  // Per-chain EIP-7702 delegation status (missing key = still checking).
+  const [delegations, setDelegations] = useState<Record<number, DelegationStatus>>({});
+  // The account's Solana address (Universal Accounts span EVM + Solana; the EVM
+  // side is the EOA itself in 7702 mode, Solana gets its own derived address).
+  const [solAddress, setSolAddress] = useState<string | null>(null);
+  // Recent Universal Account transactions from the UniversalX backend.
+  const [uaTxs, setUaTxs] = useState<UaTx[]>([]);
+  const [txsLoading, setTxsLoading] = useState(false);
 
   const uaRef = useRef<UniversalAccount | null>(null);
   const signerRef = useRef<JsonRpcSigner | null>(null);
+
+  const refreshBalance = useCallback(async () => {
+    const ua = uaRef.current;
+    if (!ua) return;
+    try {
+      const res = await ua.getPrimaryAssets();
+      setBalanceUsd(Number(res.totalAmountInUSD ?? 0));
+      const rows: TokenBalance[] = (res.assets ?? [])
+        .map((a) => {
+          const meta = tokenMeta(String(a.tokenType));
+          return {
+            type: String(a.tokenType),
+            symbol: meta.symbol,
+            name: meta.name,
+            icon: meta.icon,
+            amount: Number(a.amount ?? 0),
+            amountInUSD: Number(a.amountInUSD ?? 0),
+          };
+        })
+        .filter((r) => r.amountInUSD > 0 || r.amount > 0)
+        .sort((a, b) => b.amountInUSD - a.amountInUSD);
+      setAssets(rows);
+
+      // Aggregate every asset's per-chain holdings into one map so we can show
+      // where the unified balance physically lives — the fragmentation that the
+      // Universal Account abstracts away into a single number.
+      const byChain = new Map<number, number>();
+      for (const a of res.assets ?? []) {
+        for (const c of a.chainAggregation ?? []) {
+          const id = Number(c.token?.chainId);
+          const usd = Number(c.amountInUSD ?? 0);
+          if (!id || !(usd > 0)) continue;
+          byChain.set(id, (byChain.get(id) ?? 0) + usd);
+        }
+      }
+      setChainBalances(
+        [...byChain.entries()]
+          .map(([chainId, amountInUSD]) => ({ chainId, amountInUSD }))
+          .sort((x, y) => y.amountInUSD - x.amountInUSD)
+      );
+    } catch (e) {
+      setError(errMsg(e));
+    }
+  }, []);
+
+  // Read the EOA's delegation status on every portal chain in parallel; chains
+  // whose RPC fails simply keep their previous (or "checking") state.
+  const readDelegations = useCallback(async (address: string) => {
+    const results = await Promise.all(
+      DELEGATION_CHAINS.map(async (c) => {
+        try {
+          return [c.chainId, await readDelegation(address, c.chainId, c.rpc)] as const;
+        } catch {
+          return null;
+        }
+      })
+    );
+    setDelegations((prev) => {
+      const next = { ...prev };
+      for (const r of results) if (r) next[r[0]] = r[1];
+      return next;
+    });
+  }, []);
+
+  // Pull the latest transaction history from the UniversalX backend.
+  const refreshTransactions = useCallback(async () => {
+    const ua = uaRef.current;
+    if (!ua) return;
+    setTxsLoading(true);
+    try {
+      setUaTxs(normalizeTxs(await ua.getTransactions(1, 10)));
+    } catch {
+      /* history is best-effort; keep whatever we had */
+    } finally {
+      setTxsLoading(false);
+    }
+  }, []);
 
   const bootstrapSession = useCallback(async (address: string) => {
     const ua = new UniversalAccount({
@@ -110,13 +238,23 @@ export function useUniversalPay() {
     });
     uaRef.current = ua;
     setEoa(address);
+    // Non-blocking: per-chain 7702 delegation status for the portal.
+    void readDelegations(address);
+    // Non-blocking: the account's Solana address (the EVM side IS the EOA in
+    // 7702 mode; Solana gets its own smart-account address). Falls back to the
+    // optional NEXT_PUBLIC_SOLANA_ADDRESS env value if the lookup fails.
+    ua.getSmartAccountOptions()
+      .then((o) => setSolAddress(o.solanaSmartAccountAddress ?? SOLANA_ADDRESS_ENV))
+      .catch(() => setSolAddress(SOLANA_ADDRESS_ENV));
+    // Non-blocking: recent transaction history for the swap card.
+    void refreshTransactions();
     await refreshBalance();
     try {
       setEarn(await readEarnPosition(address));
     } catch {
       /* read-only; ignore RPC hiccups */
     }
-  }, []);
+  }, [readDelegations, refreshTransactions, refreshBalance]);
 
   // Restore an existing Magic session on mount.
   useEffect(() => {
@@ -205,52 +343,11 @@ export function useUniversalPay() {
     setAssets([]);
     setChainBalances([]);
     setEarn(null);
+    setDelegations({});
+    setSolAddress(null);
+    setUaTxs([]);
     setPending(null);
     setStatus("idle");
-  }, []);
-
-  const refreshBalance = useCallback(async () => {
-    const ua = uaRef.current;
-    if (!ua) return;
-    try {
-      const res = await ua.getPrimaryAssets();
-      setBalanceUsd(Number(res.totalAmountInUSD ?? 0));
-      const rows: TokenBalance[] = (res.assets ?? [])
-        .map((a) => {
-          const meta = tokenMeta(String(a.tokenType));
-          return {
-            type: String(a.tokenType),
-            symbol: meta.symbol,
-            name: meta.name,
-            icon: meta.icon,
-            amount: Number(a.amount ?? 0),
-            amountInUSD: Number(a.amountInUSD ?? 0),
-          };
-        })
-        .filter((r) => r.amountInUSD > 0 || r.amount > 0)
-        .sort((a, b) => b.amountInUSD - a.amountInUSD);
-      setAssets(rows);
-
-      // Aggregate every asset's per-chain holdings into one map so we can show
-      // where the unified balance physically lives — the fragmentation that the
-      // Universal Account abstracts away into a single number.
-      const byChain = new Map<number, number>();
-      for (const a of res.assets ?? []) {
-        for (const c of a.chainAggregation ?? []) {
-          const id = Number(c.token?.chainId);
-          const usd = Number(c.amountInUSD ?? 0);
-          if (!id || !(usd > 0)) continue;
-          byChain.set(id, (byChain.get(id) ?? 0) + usd);
-        }
-      }
-      setChainBalances(
-        [...byChain.entries()]
-          .map(([chainId, amountInUSD]) => ({ chainId, amountInUSD }))
-          .sort((x, y) => y.amountInUSD - x.amountInUSD)
-      );
-    } catch (e) {
-      setError(errMsg(e));
-    }
   }, []);
 
   // Sign a built Universal Account transaction and broadcast it. This is the one
@@ -348,6 +445,11 @@ export function useUniversalPay() {
     }
   }, [eoa]);
 
+  // Re-read the EOA's per-chain EIP-7702 delegation status.
+  const refreshDelegations = useCallback(async () => {
+    if (eoa) await readDelegations(eoa);
+  }, [eoa, readDelegations]);
+
   // Confirm the pending action: sign + send each built tx in order, fire the
   // caller's side effects, then refresh balance + lending position.
   const confirmPending = useCallback(async (): Promise<string> => {
@@ -360,12 +462,21 @@ export function useUniversalPay() {
       pending.run(last);
       await refreshBalance();
       await refreshEarn();
+      await refreshDelegations();
+      void refreshTransactions();
       setPending(null);
       return last;
     } finally {
       setBusy(false);
     }
-  }, [pending, signAndSend, refreshBalance, refreshEarn]);
+  }, [
+    pending,
+    signAndSend,
+    refreshBalance,
+    refreshEarn,
+    refreshDelegations,
+    refreshTransactions,
+  ]);
 
   const cancelPending = useCallback(() => setPending(null), []);
 
@@ -493,6 +604,75 @@ export function useUniversalPay() {
     [eoa]
   );
 
+  // Upgrade: explicitly delegate the EOA to the Universal Account implementation
+  // on the given chain (EIP-7702). The zero-value self-call exists only to give
+  // the relayer a transaction to attach the authorization to — signAndSend
+  // detects the undelegated userOp and signs the 7702 auth tuple automatically,
+  // so after this lands the EOA *is* the smart account there, same address.
+  const prepareUpgrade = useCallback(
+    async (chainId: number, onConfirmed: (hash: string) => void) => {
+      setError(null);
+      setBusy(true);
+      try {
+        const ua = uaRef.current;
+        if (!ua || !eoa) throw new Error("Session not ready");
+        const chain = DELEGATION_CHAINS.find((c) => c.chainId === chainId);
+        const tx = await ua.createUniversalTransaction({
+          chainId,
+          expectTokens: [],
+          transactions: [{ to: eoa, data: "0x" }],
+        });
+        const preview = buildPreview(
+          "Upgrade",
+          `Upgrade your EOA to a Universal Account on ${chain?.name ?? `chain ${chainId}`}`,
+          [tx]
+        );
+        setPending({ preview, txs: [tx], run: onConfirmed });
+      } catch (e) {
+        setError(errMsg(e));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [eoa]
+  );
+
+  // Swap (UniversalX-style): convert the unified balance into `target`, funded
+  // from whatever mix of assets/chains the account holds. `amount` is the
+  // human-readable amount of the target token to receive.
+  const prepareSwap = useCallback(
+    async (
+      target: SwapTarget,
+      amount: string,
+      onConfirmed: (hash: string) => void
+    ) => {
+      setError(null);
+      setBusy(true);
+      try {
+        const ua = uaRef.current;
+        if (!ua) throw new Error("Session not ready");
+        if (!(Number(amount) > 0)) throw new Error("Enter an amount");
+        const tx = await ua.createConvertTransaction({
+          chainId: target.chainId,
+          // SUPPORTED_TOKEN_TYPE is a string enum whose values are exactly the
+          // lowercase keys the registry uses ("usdc", "eth", "sol", …).
+          expectToken: { type: target.key as SUPPORTED_TOKEN_TYPE, amount },
+        });
+        const preview = buildPreview(
+          "Swap",
+          `Swap into ${amount} ${target.symbol}`,
+          [tx]
+        );
+        setPending({ preview, txs: [tx], run: onConfirmed });
+      } catch (e) {
+        setError(errMsg(e));
+      } finally {
+        setBusy(false);
+      }
+    },
+    []
+  );
+
   // Consolidate: convert scattered assets into USDC on Arbitrum in one move.
   const prepareConsolidate = useCallback(
     async (amount: string, onConfirmed: (hash: string) => void) => {
@@ -529,6 +709,13 @@ export function useUniversalPay() {
     assets,
     chainBalances,
     earn,
+    // Base keeps a dedicated alias for the onboarding card; the portal reads
+    // the full per-chain map.
+    baseUpgrade: delegations[BASE_CHAIN_ID] ?? null,
+    delegations,
+    solAddress,
+    uaTxs,
+    txsLoading,
     busy,
     error,
     pending,
@@ -537,11 +724,15 @@ export function useUniversalPay() {
     logout,
     refreshBalance,
     refreshEarn,
+    refreshDelegations,
+    refreshTransactions,
     pay,
     preparePay,
     prepareEarn,
     prepareWithdraw,
     prepareConsolidate,
+    prepareUpgrade,
+    prepareSwap,
     confirmPending,
     cancelPending,
   };
@@ -584,6 +775,47 @@ function buildPreview(
 function num(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
+}
+
+// The SDK types getTransactions() as `any`; accept the common envelope shapes
+// ([...], {transactions}, {list}, {data}, {data:{transactions}}) and extract
+// only the fields the UI renders, defensively.
+function normalizeTxs(res: unknown): UaTx[] {
+  const root = res as Record<string, unknown> | unknown[] | null;
+  const bag = (Array.isArray(root) ? null : root) as Record<string, unknown> | null;
+  const nested = bag?.data as Record<string, unknown> | unknown[] | undefined;
+  const candidates: unknown[] = [
+    root,
+    bag?.transactions,
+    bag?.list,
+    nested,
+    (Array.isArray(nested) ? null : nested)?.transactions,
+  ];
+  const list = candidates.find(Array.isArray) as unknown[] | undefined;
+  if (!list) return [];
+
+  return list.slice(0, 10).map((t, i) => {
+    const tx = t as Record<string, unknown>;
+    const status = Number(tx.status ?? -1);
+    const tc = tx.tokenChanges as Record<string, unknown> | undefined;
+    const created = tx.createdAt ?? tx.created_at ?? tx.quotedAt ?? null;
+    let createdAt: number | null = null;
+    if (typeof created === "number") {
+      createdAt = created > 1e12 ? created : created * 1000;
+    } else if (typeof created === "string") {
+      const p = Date.parse(created);
+      createdAt = Number.isFinite(p) ? p : null;
+    }
+    return {
+      id: String(tx.transactionId ?? tx.id ?? `tx-${i}`),
+      tag: String(tx.tag ?? tx.type ?? "transaction"),
+      statusLabel: TX_STATUS_LABEL[status] ?? "Pending",
+      failed: status === 6 || status === 10 || status === 14,
+      done: status === 7 || status === 11,
+      usd: num(tc?.totalDecrAmountInUSD),
+      createdAt,
+    };
+  });
 }
 
 function errMsg(e: unknown): string {

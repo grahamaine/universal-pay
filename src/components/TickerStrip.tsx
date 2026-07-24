@@ -13,12 +13,12 @@ const ITEMS = [
 // from. Doubled list + -50% translate keeps the loop seamless; hover pauses it.
 export function TickerStrip() {
   return (
-    <div className="ticker-row rise-in overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] py-3">
+    <div className="ticker-row rise-in overflow-hidden rounded-2xl border border-zinc-900/10 bg-white/70 py-3">
       <div className="ticker-track flex w-max gap-8 whitespace-nowrap px-4">
         {[...ITEMS, ...ITEMS].map((item, i) => (
           <span
             key={`${item.label}-${i}`}
-            className="inline-flex items-center gap-2 text-sm text-zinc-400"
+            className="inline-flex items-center gap-2 text-sm text-zinc-600"
           >
             <span className="text-base">{item.icon}</span>
             {item.label}

@@ -28,9 +28,19 @@ import { useCart } from "@/hooks/useCart";
 import { CartCard } from "@/components/CartCard";
 import { GroupsCard } from "@/components/GroupsCard";
 import { SplashScreen } from "@/components/SplashScreen";
-import { FeatureSidebar } from "@/components/FeatureSidebar";
+import { FEATURES } from "@/lib/features";
 import { AuroraBackground } from "@/components/AuroraBackground";
 import { TickerStrip } from "@/components/TickerStrip";
+import {
+  BASE_CHAIN_ID,
+  BASE_EXPLORER_ADDR,
+  SOLANA_EXPLORER_ADDR,
+  RECEIPTS_CONTRACT,
+  RECEIPTS_CONTRACT_URL,
+} from "@/lib/constants";
+import { DelegationPortal } from "@/components/DelegationPortal";
+import { SwapCard } from "@/components/SwapCard";
+import { InstallApp } from "@/components/InstallApp";
 
 export default function Home() {
   const ua = useUniversalPay();
@@ -41,7 +51,7 @@ export default function Home() {
     <DepositProvider config={{ destination: { chainId: CHAIN.ARBITRUM } }}>
       <SplashScreen />
       {ua.status === "ready" ? (
-        <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-5 py-8">
+        <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-5 py-8 lg:max-w-5xl">
           <Header />
           <Dashboard ua={ua} />
           <Footer />
@@ -70,22 +80,133 @@ function Landing({
   onLogin: (email: string) => void;
 }) {
   return (
-    <main className="relative mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-5 py-8 lg:py-12">
+    <div className="relative flex-1">
       <AuroraBackground />
-      <Header animatedLogo />
-      <TickerStrip />
-      <div className="grid flex-1 items-start gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
-        <FeatureSidebar />
-        <div className="rise-in" style={{ animationDelay: "0.15s" }}>
-          {loading ? (
-            <Skeleton />
-          ) : (
-            <Login busy={busy} error={error} onLogin={onLogin} />
-          )}
+
+      {/* Site navigation bar */}
+      <header className="sticky top-0 z-30 border-b border-zinc-900/10 bg-white/60 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-5 py-3">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-base font-bold text-white">
+            U
+          </div>
+          <span className="font-display text-xl font-semibold tracking-tight text-zinc-900">
+            Universal<span className="text-indigo-600">Pay</span>
+          </span>
+          <span className="hidden rounded-full border border-indigo-400/40 bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-700 sm:inline-flex">
+            Particle × Magic · Arbitrum
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <InstallApp />
+            <a
+              href="#signin"
+              className="rounded-full bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:from-indigo-500 hover:to-violet-500"
+            >
+              Enter App →
+            </a>
+          </div>
         </div>
+      </header>
+
+      <main className="mx-auto flex w-full max-w-6xl flex-col gap-16 px-5 pb-20 pt-14 lg:pt-20">
+        {/* Hero */}
+        <section className="rise-in mx-auto max-w-3xl text-center">
+          <p className="text-[11px] font-medium uppercase tracking-[0.25em] text-indigo-600/80">
+            Chain-abstracted payments · Particle × Magic
+          </p>
+          <h1 className="mt-4 font-display text-5xl font-semibold leading-[1.08] tracking-tight text-zinc-900 sm:text-6xl">
+            Pay in one tap.{" "}
+            <span className="block bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text italic text-transparent">
+              Settle on any chain.
+            </span>
+          </h1>
+          <p className="mx-auto mt-5 max-w-xl text-base text-zinc-600">
+            One balance for every chain and token. Sign in with an email and
+            pay, split, request, or top up — no seed phrase, no gas, no
+            networks to think about.
+          </p>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <a
+              href="#signin"
+              className="btn-shine rounded-full bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-3 text-sm font-semibold text-white transition hover:from-indigo-500 hover:to-violet-500"
+            >
+              Get started →
+            </a>
+            <a
+              href="#features"
+              className="rounded-full border border-indigo-600/40 px-6 py-3 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-500/10"
+            >
+              See what it does
+            </a>
+          </div>
+        </section>
+
+        <TickerStrip />
+
+        {/* Feature cards, DarkPool-style 3-across */}
+        <section id="features" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURES.slice(0, 6).map((f, i) => (
+            <div
+              key={f.title}
+              className="rise-in flex flex-col gap-3 rounded-3xl border border-zinc-900/10 bg-white/70 p-6 backdrop-blur"
+              style={{ animationDelay: `${0.05 * i}s` }}
+            >
+              <span className="grid h-11 w-11 place-items-center rounded-2xl bg-indigo-600/10 text-xl">
+                {f.icon}
+              </span>
+              <h3 className="font-display text-lg font-semibold text-zinc-900">
+                {f.title}
+              </h3>
+              <p className="text-sm leading-relaxed text-zinc-600">{f.desc}</p>
+            </div>
+          ))}
+        </section>
+
+        {/* Split sign-in panel: brand promise on the left, action on the right */}
+        <section
+          id="signin"
+          className="grid overflow-hidden rounded-3xl border border-zinc-900/10 shadow-2xl shadow-indigo-900/10 lg:grid-cols-[0.9fr_1.1fr]"
+        >
+          <div className="flex flex-col justify-between gap-10 bg-gradient-to-br from-indigo-600 to-violet-700 p-8 text-white lg:p-10">
+            <div>
+              <p className="font-display text-lg font-semibold">
+                Universal<span className="text-indigo-200">Pay</span>
+              </p>
+              <h2 className="mt-8 font-display text-3xl font-semibold italic leading-snug">
+                Where every chain becomes one balance.
+              </h2>
+            </div>
+            <ul className="flex flex-col gap-4 text-sm">
+              {[
+                ["One balance.", "Assets across every chain, spendable as a single number."],
+                ["Upgraded in place.", "EIP-7702 turns your email EOA into the account itself — no migration."],
+                ["Gasless UX.", "Pay in any token; the account sources liquidity and covers gas."],
+              ].map(([title, desc]) => (
+                <li key={title} className="flex items-start gap-2.5">
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300" />
+                  <span className="text-indigo-100">
+                    <strong className="font-semibold text-white">{title}</strong>{" "}
+                    {desc}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="flex items-center bg-white/80 p-6 backdrop-blur lg:p-10">
+            <div className="w-full">
+              {loading ? (
+                <Skeleton />
+              ) : (
+                <Login busy={busy} error={error} onLogin={onLogin} />
+              )}
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <div className="mx-auto w-full max-w-6xl px-5 pb-10">
+        <Footer />
       </div>
-      <Footer />
-    </main>
+    </div>
   );
 }
 
@@ -105,14 +226,15 @@ function Header({ animatedLogo = false }: { animatedLogo?: boolean }) {
           U
         </div>
       </div>
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight text-white">
-          Universal Pay
+      <div className="min-w-0 flex-1">
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-zinc-900">
+          Universal<span className="text-indigo-600">Pay</span>
         </h1>
         <p className="text-xs text-zinc-500">
           Pay or split with anyone — any chain, any token, one balance.
         </p>
       </div>
+      <InstallApp />
     </header>
   );
 }
@@ -120,9 +242,9 @@ function Header({ animatedLogo = false }: { animatedLogo?: boolean }) {
 function Skeleton() {
   return (
     <div className="animate-pulse space-y-4">
-      <div className="h-32 rounded-3xl bg-white/5" />
-      <div className="h-16 rounded-2xl bg-white/5" />
-      <div className="h-44 rounded-3xl bg-white/5" />
+      <div className="h-32 rounded-3xl bg-zinc-900/5" />
+      <div className="h-16 rounded-2xl bg-zinc-900/5" />
+      <div className="h-44 rounded-3xl bg-zinc-900/5" />
     </div>
   );
 }
@@ -143,31 +265,42 @@ function Login({
         e.preventDefault();
         if (email.trim()) onLogin(email.trim());
       }}
-      className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur"
+      className="flex flex-col gap-4"
     >
-      <div className="space-y-1">
-        <h2 className="text-lg font-medium text-white">Sign in</h2>
-        <p className="text-sm text-zinc-400">
+      <div className="space-y-1.5">
+        <h2 className="font-display text-3xl font-semibold text-zinc-900">
+          Welcome back.
+        </h2>
+        <p className="text-sm text-zinc-600">
           No wallet, no seed phrase. Just your email — we upgrade it into a
           chain-abstracted account behind the scenes.
         </p>
       </div>
-      <input
-        type="email"
-        required
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="you@email.com"
-        className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-indigo-500"
-      />
+      <div className="flex flex-col gap-1.5">
+        <label
+          htmlFor="login-email"
+          className="text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-500"
+        >
+          Email address
+        </label>
+        <input
+          id="login-email"
+          type="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@email.com"
+          className="rounded-xl border border-zinc-900/10 bg-zinc-900/5 px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-indigo-500"
+        />
+      </div>
       <button
         type="submit"
         disabled={busy}
-        className="btn-shine rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+        className="btn-shine rounded-full bg-gradient-to-r from-indigo-600 to-violet-600 py-3 text-sm font-semibold text-white transition hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50"
       >
-        {busy ? "Setting up your account…" : "Continue with email"}
+        {busy ? "Setting up your account…" : "Access your balance →"}
       </button>
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && <p className="text-sm text-red-600">{error}</p>}
     </form>
   );
 }
@@ -284,77 +417,92 @@ function Dashboard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <BalanceCard ua={ua} />
+      {/* Two-widget-column landscape layout on desktop; single stack on mobile.
+          Left = money in motion (balance, funding, send, requests, groups);
+          right = account & DeFi (addresses/upgrade, delegation, swap, earn). */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:items-start lg:gap-6">
+        <div className="flex flex-col gap-5">
+          <BalanceCard ua={ua} />
 
-      {ua.eoa && ua.balanceUsd === 0 && (
-        <FundCard
-          ready={deposit.isReady}
-          onAddFunds={deposit.open}
-          onReceive={() => setSheet("receive")}
-        />
-      )}
+          {ua.eoa && ua.balanceUsd === 0 && (
+            <FundCard
+              ready={deposit.isReady}
+              onAddFunds={deposit.open}
+              onReceive={() => setSheet("receive")}
+            />
+          )}
 
-      <QuickActions
-        ownerReady={!!ua.eoa}
-        depositReady={deposit.isReady}
-        onAddFunds={deposit.open}
-        onReceive={() => setSheet("receive")}
-        onScan={() => setSheet("scan")}
-        onContacts={() => setSheet("contacts")}
-      />
+          <QuickActions
+            ownerReady={!!ua.eoa}
+            depositReady={deposit.isReady}
+            onAddFunds={deposit.open}
+            onReceive={() => setSheet("receive")}
+            onScan={() => setSheet("scan")}
+            onContacts={() => setSheet("contacts")}
+          />
 
-      <UnderTheHood ua={ua} />
+          {incoming && (
+            <div className="flex items-start gap-3 rounded-2xl border border-indigo-500/30 bg-indigo-500/10 p-4 text-sm">
+              <span className="text-lg">💸</span>
+              <div className="min-w-0">
+                <p className="font-medium text-indigo-700">Payment request loaded</p>
+                <p className="text-indigo-600/70">
+                  {incoming.note ? `“${incoming.note}” — ` : ""}
+                  {incoming.amount ? `$${incoming.amount} ` : ""}prefilled below.
+                </p>
+              </div>
+            </div>
+          )}
 
-      {incoming && (
-        <div className="flex items-start gap-3 rounded-2xl border border-indigo-500/30 bg-indigo-500/10 p-4 text-sm">
-          <span className="text-lg">💸</span>
-          <div className="min-w-0">
-            <p className="font-medium text-indigo-200">Payment request loaded</p>
-            <p className="text-indigo-300/70">
-              {incoming.note ? `“${incoming.note}” — ` : ""}
-              {incoming.amount ? `$${incoming.amount} ` : ""}prefilled below.
-            </p>
-          </div>
+          <SendCard
+            recipients={recipients}
+            isSplit={isSplit}
+            total={total}
+            token={token}
+            onToken={setToken}
+            busy={ua.busy}
+            error={ua.error}
+            balanceUsd={ua.balanceUsd}
+            depositReady={deposit.isReady}
+            onAddFunds={deposit.open}
+            contacts={contacts}
+            onUpdate={update}
+            onAdd={addRecipient}
+            onRemove={removeRecipient}
+            onSplitEvenly={splitEvenly}
+            onPay={handlePay}
+            splitMode={splitMode}
+            onSplitMode={setSplitMode}
+            shares={shares}
+            onShares={setShares}
+            shareTotal={shareTotal}
+            onShareTotal={setShareTotal}
+            shareAmounts={computedShareAmounts()}
+          />
+
+          {result && <SuccessCard result={result} onDismiss={() => setResult(null)} />}
+
+          <RequestsCard requests={requests} ownerAddress={ua.eoa} />
+
+          <CartCard ua={ua} cart={cart} onRecord={activity.add} />
+
+          <GroupsCard ua={ua} />
+
+          <ActivityFeed entries={activity.entries} onClear={activity.clear} />
         </div>
-      )}
 
-      <SendCard
-        recipients={recipients}
-        isSplit={isSplit}
-        total={total}
-        token={token}
-        onToken={setToken}
-        busy={ua.busy}
-        error={ua.error}
-        balanceUsd={ua.balanceUsd}
-        depositReady={deposit.isReady}
-        onAddFunds={deposit.open}
-        contacts={contacts}
-        onUpdate={update}
-        onAdd={addRecipient}
-        onRemove={removeRecipient}
-        onSplitEvenly={splitEvenly}
-        onPay={handlePay}
-        splitMode={splitMode}
-        onSplitMode={setSplitMode}
-        shares={shares}
-        onShares={setShares}
-        shareTotal={shareTotal}
-        onShareTotal={setShareTotal}
-        shareAmounts={computedShareAmounts()}
-      />
+        <div className="flex flex-col gap-5">
+          <UpgradeCard ua={ua} onRecord={activity.add} />
 
-      {result && <SuccessCard result={result} onDismiss={() => setResult(null)} />}
+          <DelegationPortal ua={ua} onRecord={activity.add} />
 
-      <CartCard ua={ua} cart={cart} onRecord={activity.add} />
+          <SwapCard ua={ua} onRecord={activity.add} />
 
-      <EarnCard ua={ua} onRecord={activity.add} />
+          <EarnCard ua={ua} onRecord={activity.add} />
 
-      <RequestsCard requests={requests} ownerAddress={ua.eoa} />
-
-      <GroupsCard ua={ua} />
-
-      <ActivityFeed entries={activity.entries} onClear={activity.clear} />
+          <UnderTheHood ua={ua} />
+        </div>
+      </div>
 
       <ReceiveModal
         open={sheet === "receive"}
@@ -427,9 +575,9 @@ function ActionButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className="flex flex-col items-center gap-1.5 rounded-2xl border border-white/10 bg-white/[0.03] py-3 text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.06] disabled:opacity-40"
+      className="flex flex-col items-center gap-1.5 rounded-2xl border border-zinc-900/10 bg-white/70 py-3 text-zinc-700 transition hover:border-zinc-900/20 hover:bg-white disabled:opacity-40"
     >
-      <span className="grid h-8 w-8 place-items-center rounded-full bg-indigo-600/20 text-base text-indigo-300">
+      <span className="grid h-8 w-8 place-items-center rounded-full bg-indigo-600/20 text-base text-indigo-600">
         {icon}
       </span>
       <span className="text-[11px] font-medium">{label}</span>
@@ -496,10 +644,10 @@ function FundCard({
           👋
         </span>
         <div className="min-w-0">
-          <h2 className="text-base font-medium text-white">
+          <h2 className="text-base font-medium text-zinc-900">
             Fund your account to get started
           </h2>
-          <p className="mt-0.5 text-sm text-zinc-400">
+          <p className="mt-0.5 text-sm text-zinc-600">
             Move crypto in from any chain or token — ETH, USDC, USDT and more.
             It all lands as one spendable balance on Arbitrum.
           </p>
@@ -515,11 +663,164 @@ function FundCard({
         </button>
         <button
           onClick={onReceive}
-          className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.06]"
+          className="rounded-xl border border-zinc-900/10 bg-white/70 px-4 py-2.5 text-sm font-medium text-zinc-700 transition hover:border-zinc-900/20 hover:bg-white"
         >
           Show address
         </button>
       </div>
+    </section>
+  );
+}
+
+// Base onboarding card: (1) your wallet address, front and centre, to receive
+// faucet funds; (2) an explicit "Upgrade" action that EIP-7702-delegates the
+// EOA to the Universal Account implementation on Base — same address, upgraded
+// in place. The green state is real on-chain proof (the EOA's account code is
+// read from Base and must be the 0xef0100‖implementation designator), not app
+// state, so judges can verify it on Basescan.
+function UpgradeCard({
+  ua,
+  onRecord,
+}: {
+  ua: ReturnType<typeof useUniversalPay>;
+  onRecord: ReturnType<typeof useActivity>["add"];
+}) {
+  const [copied, setCopied] = useState<"evm" | "sol" | null>(null);
+  const status = ua.baseUpgrade;
+  const upgraded = status?.delegated === true;
+
+  async function copyAddress(which: "evm" | "sol", value: string | null) {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(which);
+      setTimeout(() => setCopied(null), 1500);
+    } catch {
+      /* clipboard unavailable (e.g. insecure context) */
+    }
+  }
+
+  async function handleUpgrade() {
+    await ua.prepareUpgrade(BASE_CHAIN_ID, (hash) => {
+      onRecord({
+        id: hash || `upgrade-${Date.now()}`,
+        kind: "upgrade",
+        amount: "0.00",
+        label: "Base",
+        txHash: hash,
+      });
+    });
+  }
+
+  return (
+    <section className="flex flex-col gap-3 rounded-3xl border border-sky-500/30 bg-sky-500/[0.06] p-5">
+      <div className="flex items-start gap-3">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-sky-600/25 text-xl">
+          ⚡
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base font-medium text-zinc-900">
+            Universal Account on Base
+          </h2>
+          <p className="mt-0.5 text-sm text-zinc-600">
+            {upgraded
+              ? "Your EOA is upgraded — it now acts as the Universal Account on Base."
+              : "Fund your wallet, then upgrade your EOA in place via EIP-7702."}
+          </p>
+        </div>
+        <span
+          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium ${
+            status === null
+              ? "bg-zinc-500/15 text-zinc-600"
+              : upgraded
+                ? "bg-emerald-500/15 text-emerald-600"
+                : "bg-amber-500/15 text-amber-600"
+          }`}
+        >
+          {status === null ? "Checking…" : upgraded ? "Upgraded ✓" : "Not upgraded"}
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-1.5 rounded-2xl bg-white/70 p-3.5">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+          EVM address — send faucet funds here
+        </p>
+        <div className="flex items-center gap-2">
+          <code className="min-w-0 flex-1 break-all font-mono text-xs text-sky-700">
+            {ua.eoa ?? "—"}
+          </code>
+          <button
+            onClick={() => copyAddress("evm", ua.eoa)}
+            className="shrink-0 rounded-lg border border-zinc-900/10 bg-white/60 px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:border-zinc-900/20"
+          >
+            {copied === "evm" ? "Copied ✓" : "Copy"}
+          </button>
+        </div>
+        <p className="text-[11px] text-zinc-400">
+          Your Magic EOA <span className="text-zinc-600">is</span> your Universal
+          Account address — one and the same, on every EVM chain.
+        </p>
+        {ua.eoa && (
+          <a
+            href={BASE_EXPLORER_ADDR(ua.eoa)}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[11px] text-sky-600 hover:underline"
+          >
+            View on Basescan ↗
+          </a>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-1.5 rounded-2xl bg-white/70 p-3.5">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+          Solana address — Universal Account (SOL side)
+        </p>
+        <div className="flex items-center gap-2">
+          <code className="min-w-0 flex-1 break-all font-mono text-xs text-violet-200">
+            {ua.solAddress ?? "Deriving…"}
+          </code>
+          {ua.solAddress && (
+            <button
+              onClick={() => copyAddress("sol", ua.solAddress)}
+              className="shrink-0 rounded-lg border border-zinc-900/10 bg-white/60 px-2.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:border-zinc-900/20"
+            >
+              {copied === "sol" ? "Copied ✓" : "Copy"}
+            </button>
+          )}
+        </div>
+        {ua.solAddress && (
+          <a
+            href={SOLANA_EXPLORER_ADDR(ua.solAddress)}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[11px] text-violet-600 hover:underline"
+          >
+            View on Solscan ↗
+          </a>
+        )}
+      </div>
+
+      {upgraded ? (
+        <p className="text-xs text-zinc-500">
+          On-chain proof: account code on Base is the EIP-7702 designator,
+          delegated to{" "}
+          <span className="font-mono text-emerald-600/90">
+            {status?.implementation
+              ? `${status.implementation.slice(0, 8)}…${status.implementation.slice(-6)}`
+              : ""}
+          </span>
+          {" "}— same address, no migration.
+        </p>
+      ) : (
+        <button
+          onClick={handleUpgrade}
+          disabled={ua.busy || !ua.eoa}
+          className="rounded-xl bg-sky-600 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:opacity-50"
+        >
+          {ua.busy ? "Preparing…" : "Upgrade to Universal Account"}
+        </button>
+      )}
     </section>
   );
 }
@@ -591,9 +892,9 @@ function SendCard({
     effectiveTotal > balanceUsd;
 
   return (
-    <section className="flex flex-col gap-3 rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+    <section className="flex flex-col gap-3 rounded-3xl border border-zinc-900/10 bg-white/70 p-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-medium text-white">
+        <h2 className="text-base font-medium text-zinc-900">
           {isSplit ? "Split a bill" : "Send money"}
         </h2>
         <TokenPicker token={token} onToken={onToken} />
@@ -602,7 +903,7 @@ function SendCard({
       {/* Share-mode total input */}
       {isShareMode && (
         <div className="flex items-center gap-2 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-3 py-2.5">
-          <span className="text-xs text-indigo-300">Total bill</span>
+          <span className="text-xs text-indigo-600">Total bill</span>
           <div className="flex flex-1 items-center justify-end gap-1">
             <span className="text-xs text-zinc-500">{token.icon}</span>
             <input
@@ -610,7 +911,7 @@ function SendCard({
               onChange={(e) => onShareTotal(e.target.value)}
               inputMode="decimal"
               placeholder={token.stable ? "0.00" : "0.0"}
-              className="w-24 bg-transparent text-right text-sm font-semibold text-white outline-none"
+              className="w-24 bg-transparent text-right text-sm font-semibold text-zinc-900 outline-none"
             />
           </div>
         </div>
@@ -625,11 +926,11 @@ function SendCard({
                 value={r.address}
                 onChange={(e) => onUpdate(i, { address: e.target.value })}
                 placeholder="0x recipient address"
-                className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 font-mono text-xs text-white outline-none transition focus:border-indigo-500"
+                className="min-w-0 flex-1 rounded-xl border border-zinc-900/10 bg-zinc-900/5 px-3 py-2.5 font-mono text-xs text-zinc-900 outline-none transition focus:border-indigo-500"
               />
               {isShareMode ? (
                 /* Share count input — computed amount shown as hint */
-                <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-2">
+                <div className="flex items-center gap-1 rounded-xl border border-zinc-900/10 bg-zinc-900/5 px-2">
                   <span className="text-xs text-zinc-500">×</span>
                   <input
                     type="number"
@@ -638,28 +939,28 @@ function SendCard({
                     onChange={(e) =>
                       onShares({ ...shares, [i]: Number(e.target.value) || 1 })
                     }
-                    className="w-10 bg-transparent py-2.5 text-center text-sm text-white outline-none"
+                    className="w-10 bg-transparent py-2.5 text-center text-sm text-zinc-900 outline-none"
                   />
                   <span className="text-xs text-zinc-500">
                     {shareAmounts[i] ? `= ${shareAmounts[i]}` : "share"}
                   </span>
                 </div>
               ) : (
-                <div className="flex items-center rounded-xl border border-white/10 bg-white/5 px-2">
+                <div className="flex items-center rounded-xl border border-zinc-900/10 bg-zinc-900/5 px-2">
                   <span className="text-xs text-zinc-500">{token.icon}</span>
                   <input
                     value={r.amount}
                     onChange={(e) => onUpdate(i, { amount: e.target.value })}
                     inputMode="decimal"
                     placeholder={token.stable ? "0.00" : "0.0"}
-                    className="w-16 bg-transparent px-1 py-2.5 text-right text-sm text-white outline-none"
+                    className="w-16 bg-transparent px-1 py-2.5 text-right text-sm text-zinc-900 outline-none"
                   />
                 </div>
               )}
               {recipients.length > 1 && (
                 <button
                   onClick={() => onRemove(i)}
-                  className="text-zinc-500 hover:text-red-400"
+                  className="text-zinc-500 hover:text-red-600"
                   aria-label="remove"
                 >
                   ✕
@@ -668,7 +969,7 @@ function SendCard({
             </div>
             {r.address.trim() &&
               (known ? (
-                <span className="pl-1 text-xs text-emerald-400">★ {known.name}</span>
+                <span className="pl-1 text-xs text-emerald-600">★ {known.name}</span>
               ) : (
                 <SaveContactInline address={r.address} contacts={contacts} />
               ))}
@@ -679,7 +980,7 @@ function SendCard({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button
           onClick={onAdd}
-          className="text-sm font-medium text-indigo-400 hover:text-indigo-300"
+          className="text-sm font-medium text-indigo-600 hover:text-indigo-600"
         >
           + Add person to split
         </button>
@@ -687,13 +988,13 @@ function SendCard({
         {isSplit && (
           <div className="flex items-center gap-1.5">
             {/* Split-mode toggle */}
-            <div className="flex items-center gap-0.5 rounded-full border border-white/10 p-0.5 text-[11px]">
+            <div className="flex items-center gap-0.5 rounded-full border border-zinc-900/10 p-0.5 text-[11px]">
               <button
                 onClick={() => onSplitMode("amount")}
                 className={`rounded-full px-2.5 py-1 font-medium transition ${
                   splitMode === "amount"
                     ? "bg-indigo-600 text-white"
-                    : "text-zinc-400 hover:text-white"
+                    : "text-zinc-600 hover:text-zinc-900"
                 }`}
               >
                 By amount
@@ -703,7 +1004,7 @@ function SendCard({
                 className={`rounded-full px-2.5 py-1 font-medium transition ${
                   splitMode === "share"
                     ? "bg-indigo-600 text-white"
-                    : "text-zinc-400 hover:text-white"
+                    : "text-zinc-600 hover:text-zinc-900"
                 }`}
               >
                 By share
@@ -712,19 +1013,19 @@ function SendCard({
 
             {splitMode === "amount" && (
               <>
-                <div className="flex items-center rounded-lg border border-white/10 bg-white/5 px-2">
+                <div className="flex items-center rounded-lg border border-zinc-900/10 bg-zinc-900/5 px-2">
                   <span className="text-xs text-zinc-500">{token.icon}</span>
                   <input
                     value={splitTotal}
                     onChange={(e) => setSplitTotal(e.target.value)}
                     inputMode="decimal"
                     placeholder="total"
-                    className="w-16 bg-transparent px-1 py-1.5 text-right text-xs text-white outline-none"
+                    className="w-16 bg-transparent px-1 py-1.5 text-right text-xs text-zinc-900 outline-none"
                   />
                 </div>
                 <button
                   onClick={() => onSplitEvenly(splitTotal)}
-                  className="rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-white/20"
+                  className="rounded-lg bg-zinc-900/10 px-2.5 py-1.5 text-xs font-medium text-zinc-900 hover:bg-zinc-900/20"
                 >
                   Split evenly
                 </button>
@@ -734,11 +1035,11 @@ function SendCard({
         )}
       </div>
 
-      <div className="mt-1 flex items-center justify-between border-t border-white/10 pt-3 text-sm">
-        <span className="text-zinc-400">
+      <div className="mt-1 flex items-center justify-between border-t border-zinc-900/10 pt-3 text-sm">
+        <span className="text-zinc-600">
           Total {isSplit ? `· ${recipients.length} people` : ""}
         </span>
-        <span className="font-semibold text-white">
+        <span className="font-semibold text-zinc-900">
           {isShareMode ? shareSumStr : total} {token.symbol}
         </span>
       </div>
@@ -771,7 +1072,7 @@ function SendCard({
             : `${isSplit ? "Split" : "Send"} ${isShareMode ? shareSumStr : total} ${token.symbol}`}
       </button>
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && <p className="text-sm text-red-600">{error}</p>}
     </section>
   );
 }
@@ -792,7 +1093,7 @@ function SaveContactInline({
     return (
       <button
         onClick={() => setEditing(true)}
-        className="self-start pl-1 text-xs text-zinc-500 hover:text-indigo-400"
+        className="self-start pl-1 text-xs text-zinc-500 hover:text-indigo-600"
       >
         + Save as contact
       </button>
@@ -805,7 +1106,7 @@ function SaveContactInline({
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="Name"
-        className="w-28 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white outline-none"
+        className="w-28 rounded-lg border border-zinc-900/10 bg-zinc-900/5 px-2 py-1 text-xs text-zinc-900 outline-none"
       />
       <button
         onClick={() => {
@@ -813,13 +1114,13 @@ function SaveContactInline({
           setEditing(false);
           setName("");
         }}
-        className="text-xs font-medium text-emerald-400 hover:text-emerald-300"
+        className="text-xs font-medium text-emerald-600 hover:text-emerald-600"
       >
         Save
       </button>
       <button
         onClick={() => setEditing(false)}
-        className="text-xs text-zinc-500 hover:text-zinc-300"
+        className="text-xs text-zinc-500 hover:text-zinc-700"
       >
         Cancel
       </button>
@@ -829,7 +1130,7 @@ function SaveContactInline({
 
 function BalanceCard({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
   return (
-    <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-600 p-5 text-white shadow-xl shadow-indigo-950/40">
+    <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-600 p-5 text-white shadow-xl shadow-indigo-300/50">
       <div className="absolute -right-8 -top-10 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
       <div className="relative flex items-start justify-between">
         <div>
@@ -890,14 +1191,14 @@ function SuccessCard({
   return (
     <section className="rounded-3xl border border-emerald-500/30 bg-emerald-500/10 p-5">
       <div className="flex items-center justify-between">
-        <h3 className="font-medium text-emerald-300">
+        <h3 className="font-medium text-emerald-600">
           ✓ {result.total} {result.symbol} sent
         </h3>
-        <button onClick={onDismiss} className="text-emerald-400">
+        <button onClick={onDismiss} className="text-emerald-600">
           ✕
         </button>
       </div>
-      <p className="mt-1 text-sm text-emerald-300/80">
+      <p className="mt-1 text-sm text-emerald-600/90">
         Paid {result.recipients} {result.recipients > 1 ? "people" : "person"},
         settled on Arbitrum.
       </p>
@@ -905,7 +1206,7 @@ function SuccessCard({
         href={result.explorerUrl}
         target="_blank"
         rel="noreferrer"
-        className="mt-2 inline-block text-sm font-medium text-emerald-300 underline"
+        className="mt-2 inline-block text-sm font-medium text-emerald-600 underline"
       >
         View on Arbiscan →
       </a>
@@ -922,25 +1223,25 @@ function ActivityFeed({
 }) {
   if (entries.length === 0) return null;
   return (
-    <section className="flex flex-col gap-2 rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+    <section className="flex flex-col gap-2 rounded-3xl border border-zinc-900/10 bg-white/70 p-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-medium text-white">Activity</h2>
+        <h2 className="text-base font-medium text-zinc-900">Activity</h2>
         <div className="flex items-center gap-3">
           <button
             onClick={() => exportActivityCsv(entries)}
-            className="text-xs text-zinc-500 hover:text-zinc-300"
+            className="text-xs text-zinc-500 hover:text-zinc-700"
           >
             Export CSV
           </button>
           <button
             onClick={onClear}
-            className="text-xs text-zinc-500 hover:text-zinc-300"
+            className="text-xs text-zinc-500 hover:text-zinc-700"
           >
             Clear
           </button>
         </div>
       </div>
-      <ul className="flex flex-col divide-y divide-white/5">
+      <ul className="flex flex-col divide-y divide-zinc-900/5">
         {entries.map((e) => (
           <ActivityRow key={e.id} entry={e} />
         ))}
@@ -978,7 +1279,10 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
   // Money returning to the spendable balance is "incoming" (green +); money
   // leaving it is outgoing (−); a consolidate just reshapes the same balance.
   const incoming = entry.kind === "deposit" || entry.kind === "withdraw";
-  const neutral = entry.kind === "consolidate";
+  const neutral =
+    entry.kind === "consolidate" ||
+    entry.kind === "upgrade" ||
+    entry.kind === "swap";
   const title =
     entry.kind === "split"
       ? `Split with ${entry.recipients} people`
@@ -994,8 +1298,23 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
               ? "Withdrew from Earn"
               : entry.kind === "consolidate"
                 ? "Consolidated to USDC"
-                : `Deposit${entry.chainId ? ` from ${getChainName(entry.chainId)}` : ""}`;
-  const icon = entry.kind === "shop" ? "🛒" : neutral ? "⇄" : incoming ? "↓" : "↑";
+                : entry.kind === "upgrade"
+                  ? `Upgraded to Universal Account · ${entry.label ?? "Base"}`
+                  : entry.kind === "swap"
+                    ? `Swapped to ${entry.token ?? "token"}`
+                    : `Deposit${entry.chainId ? ` from ${getChainName(entry.chainId)}` : ""}`;
+  const icon =
+    entry.kind === "upgrade"
+      ? "⚡"
+      : entry.kind === "swap"
+        ? "🔁"
+        : entry.kind === "shop"
+          ? "🛒"
+          : neutral
+            ? "⇄"
+            : incoming
+              ? "↓"
+              : "↑";
 
   return (
     <li className="flex items-center justify-between gap-3 py-3">
@@ -1003,33 +1322,37 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
         <span
           className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-sm ${
             neutral
-              ? "bg-zinc-500/15 text-zinc-300"
+              ? "bg-zinc-500/15 text-zinc-700"
               : incoming
-                ? "bg-emerald-500/15 text-emerald-300"
-                : "bg-indigo-500/15 text-indigo-300"
+                ? "bg-emerald-500/15 text-emerald-600"
+                : "bg-indigo-500/15 text-indigo-600"
           }`}
         >
           {icon}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-white">{title}</p>
+          <p className="truncate text-sm font-medium text-zinc-900">{title}</p>
           <p className="text-xs text-zinc-500">{timeAgo(entry.timestamp)}</p>
         </div>
       </div>
       <div className="flex flex-col items-end">
         <span
           className={`text-sm font-semibold ${
-            incoming ? "text-emerald-400" : "text-white"
+            incoming ? "text-emerald-600" : "text-zinc-900"
           }`}
         >
-          {neutral ? "" : incoming ? "+" : "−"}${entry.amount}
+          {entry.kind === "upgrade"
+            ? ""
+            : entry.kind === "swap"
+              ? `${entry.amount} ${entry.token ?? ""}`
+              : `${neutral ? "" : incoming ? "+" : "−"}$${entry.amount}`}
         </span>
         {entry.explorerUrl && (
           <a
             href={entry.explorerUrl}
             target="_blank"
             rel="noreferrer"
-            className="text-[11px] text-indigo-400 hover:underline"
+            className="text-[11px] text-indigo-600 hover:underline"
           >
             View ↗
           </a>
@@ -1069,17 +1392,17 @@ function UnderTheHood({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
   const total = chains.reduce((s, c) => s + c.amountInUSD, 0) || 1;
 
   return (
-    <section className="rounded-3xl border border-white/10 bg-white/[0.03]">
+    <section className="rounded-3xl border border-zinc-900/10 bg-white/70">
       <button
         onClick={() => setOpen((o) => !o)}
         className="flex w-full items-center justify-between px-5 py-4 text-left"
       >
         <div className="flex items-center gap-2.5">
-          <span className="grid h-7 w-7 place-items-center rounded-lg bg-indigo-500/15 text-sm text-indigo-300">
+          <span className="grid h-7 w-7 place-items-center rounded-lg bg-indigo-500/15 text-sm text-indigo-600">
             🔎
           </span>
           <div>
-            <h2 className="text-base font-medium text-white">Under the hood</h2>
+            <h2 className="text-base font-medium text-zinc-900">Under the hood</h2>
             <p className="text-xs text-zinc-500">
               {chains.length > 0
                 ? `One balance across ${chains.length} chain${chains.length > 1 ? "s" : ""}`
@@ -1091,8 +1414,8 @@ function UnderTheHood({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
       </button>
 
       {open && (
-        <div className="flex flex-col gap-4 border-t border-white/10 px-5 pb-5 pt-4">
-          <div className="flex flex-col gap-2.5 rounded-2xl bg-white/[0.03] p-4">
+        <div className="flex flex-col gap-4 border-t border-zinc-900/10 px-5 pb-5 pt-4">
+          <div className="flex flex-col gap-2.5 rounded-2xl bg-white/70 p-4">
             <ProofRow
               label="Your address"
               value={ua.eoa ? `${ua.eoa.slice(0, 6)}…${ua.eoa.slice(-4)}` : "—"}
@@ -1109,23 +1432,41 @@ function UnderTheHood({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
               hint="No funds moved, no smart-account deployed"
             />
             <ProofRow label="Settlement" value="Arbitrum One" hint="Where transfers land" />
+            <div className="flex items-start gap-2.5">
+              <span className="mt-0.5 text-indigo-600">●</span>
+              <div className="min-w-0 flex-1 text-xs">
+                <span className="text-zinc-600">Receipts contract</span>{" "}
+                <a
+                  href={RECEIPTS_CONTRACT_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-indigo-600 underline decoration-indigo-300 underline-offset-2 hover:text-indigo-500"
+                >
+                  {RECEIPTS_CONTRACT.slice(0, 6)}…{RECEIPTS_CONTRACT.slice(-4)} ↗
+                </a>
+                <p className="text-zinc-500">
+                  Our own contract, deployed &amp; source-verified on Arbitrum One —
+                  emits an on-chain Receipt event per payment
+                </p>
+              </div>
+            </div>
           </div>
 
           {chains.length > 0 ? (
             <div>
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-400">
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-600">
                 Where your money lives
               </p>
               <ul className="flex flex-col gap-2.5">
                 {chains.map((c) => (
                   <li key={c.chainId} className="flex flex-col gap-1">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-zinc-300">{chainName(c.chainId)}</span>
-                      <span className="text-zinc-400">
+                      <span className="text-zinc-700">{chainName(c.chainId)}</span>
+                      <span className="text-zinc-600">
                         ${c.amountInUSD.toFixed(2)}
                       </span>
                     </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-zinc-900/5">
                       <div
                         className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500"
                         style={{ width: `${Math.max(4, (c.amountInUSD / total) * 100)}%` }}
@@ -1163,15 +1504,15 @@ function ProofRow({
 }) {
   return (
     <div className="flex items-start gap-2.5">
-      <span className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-emerald-500/20 text-[9px] text-emerald-300">
+      <span className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-emerald-500/20 text-[9px] text-emerald-600">
         ✓
       </span>
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs text-zinc-500">{label}</span>
-          <span className="text-right text-xs font-medium text-white">{value}</span>
+          <span className="text-right text-xs font-medium text-zinc-900">{value}</span>
         </div>
-        {hint && <span className="text-[11px] text-zinc-600">{hint}</span>}
+        {hint && <span className="text-[11px] text-zinc-400">{hint}</span>}
       </div>
     </div>
   );
@@ -1187,13 +1528,13 @@ function PreviewSheet({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
       {p && (
         <div className="flex flex-col gap-4">
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-indigo-300">
+            <p className="text-xs font-medium uppercase tracking-wide text-indigo-600">
               {p.preview.action}
             </p>
-            <p className="mt-0.5 text-sm text-zinc-300">{p.preview.summary}</p>
+            <p className="mt-0.5 text-sm text-zinc-700">{p.preview.summary}</p>
           </div>
 
-          <div className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm">
+          <div className="flex flex-col gap-2 rounded-2xl border border-zinc-900/10 bg-white/70 p-4 text-sm">
             <PreviewRow label="You pay" value={`$${p.preview.payUsd.toFixed(2)}`} />
             {p.preview.receiveUsd > 0 && (
               <PreviewRow
@@ -1214,18 +1555,18 @@ function PreviewSheet({ ua }: { ua: ReturnType<typeof useUniversalPay> }) {
             {p.preview.swaps > 0 && (
               <PreviewRow label="Swaps routed" value={String(p.preview.swaps)} />
             )}
-            <div className="mt-2 flex items-center gap-2 rounded-xl bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
+            <div className="mt-2 flex items-center gap-2 rounded-xl bg-emerald-500/10 px-3 py-2 text-xs text-emerald-600">
               <span>⛽</span>
               <span>No gas token needed — your Universal Account covers it.</span>
             </div>
           </div>
 
-          {ua.error && <p className="text-sm text-red-400">{ua.error}</p>}
+          {ua.error && <p className="text-sm text-red-600">{ua.error}</p>}
 
           <div className="flex gap-2">
             <button
               onClick={ua.cancelPending}
-              className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-medium text-zinc-300 transition hover:bg-white/[0.06]"
+              className="rounded-xl border border-zinc-900/10 bg-white/70 px-4 py-3 text-sm font-medium text-zinc-700 transition hover:bg-white"
             >
               Cancel
             </button>
@@ -1253,7 +1594,7 @@ function PreviewRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3">
       <span className="text-zinc-500">{label}</span>
-      <span className="text-right font-medium text-white">{value}</span>
+      <span className="text-right font-medium text-zinc-900">{value}</span>
     </div>
   );
 }
@@ -1328,11 +1669,11 @@ function EarnCard({
   }
 
   return (
-    <section className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+    <section className="flex flex-col gap-4 rounded-3xl border border-zinc-900/10 bg-white/70 p-5">
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="flex items-center gap-2 text-base font-medium text-white">
-            <span className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-500/15 text-sm text-emerald-300">
+          <h2 className="flex items-center gap-2 text-base font-medium text-zinc-900">
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-500/15 text-sm text-emerald-600">
               ✦
             </span>
             Universal Earn
@@ -1342,26 +1683,26 @@ function EarnCard({
           </p>
         </div>
         {apr > 0 && (
-          <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-semibold text-emerald-300">
+          <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-semibold text-emerald-600">
             {apr.toFixed(2)}% APR
           </span>
         )}
       </div>
 
-      <div className="flex items-center justify-between rounded-2xl bg-white/[0.03] px-4 py-3">
+      <div className="flex items-center justify-between rounded-2xl bg-white/70 px-4 py-3">
         <span className="text-xs text-zinc-500">Currently earning</span>
-        <span className="text-lg font-semibold text-white">
+        <span className="text-lg font-semibold text-zinc-900">
           ${supplied.toFixed(2)}{" "}
           <span className="text-xs font-normal text-zinc-500">USDC</span>
         </span>
       </div>
 
       {/* Earn / Withdraw toggle */}
-      <div className="flex items-center gap-0.5 self-start rounded-full border border-white/10 p-0.5 text-xs">
+      <div className="flex items-center gap-0.5 self-start rounded-full border border-zinc-900/10 p-0.5 text-xs">
         <button
           onClick={() => setMode("earn")}
           className={`rounded-full px-3 py-1 font-medium transition ${
-            mode === "earn" ? "bg-emerald-600 text-white" : "text-zinc-400 hover:text-white"
+            mode === "earn" ? "bg-emerald-600 text-white" : "text-zinc-600 hover:text-zinc-900"
           }`}
         >
           Deposit
@@ -1370,7 +1711,7 @@ function EarnCard({
           onClick={() => setMode("withdraw")}
           disabled={supplied <= 0}
           className={`rounded-full px-3 py-1 font-medium transition disabled:opacity-40 ${
-            mode === "withdraw" ? "bg-emerald-600 text-white" : "text-zinc-400 hover:text-white"
+            mode === "withdraw" ? "bg-emerald-600 text-white" : "text-zinc-600 hover:text-zinc-900"
           }`}
         >
           Withdraw
@@ -1378,14 +1719,14 @@ function EarnCard({
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="flex flex-1 items-center rounded-xl border border-white/10 bg-white/5 px-3">
+        <div className="flex flex-1 items-center rounded-xl border border-zinc-900/10 bg-zinc-900/5 px-3">
           <span className="text-xs text-zinc-500">$</span>
           <input
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             inputMode="decimal"
             placeholder="0.00"
-            className="w-full bg-transparent px-2 py-2.5 text-sm text-white outline-none"
+            className="w-full bg-transparent px-2 py-2.5 text-sm text-zinc-900 outline-none"
           />
           <span className="text-xs text-zinc-500">USDC</span>
         </div>
@@ -1402,21 +1743,21 @@ function EarnCard({
         <button
           onClick={withdrawAll}
           disabled={ua.busy}
-          className="self-start text-xs font-medium text-emerald-400 hover:text-emerald-300 disabled:opacity-50"
+          className="self-start text-xs font-medium text-emerald-600 hover:text-emerald-600 disabled:opacity-50"
         >
           Withdraw all (${supplied.toFixed(2)})
         </button>
       )}
 
       {scattered > 0.01 && (
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.02] px-4 py-3">
-          <span className="text-xs text-zinc-400">
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-900/10 bg-white/50 px-4 py-3">
+          <span className="text-xs text-zinc-600">
             ${scattered.toFixed(2)} in other tokens — consolidate to USDC?
           </span>
           <button
             onClick={consolidate}
             disabled={ua.busy}
-            className="shrink-0 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-white/20 disabled:opacity-50"
+            className="shrink-0 rounded-lg bg-zinc-900/10 px-2.5 py-1.5 text-xs font-medium text-zinc-900 transition hover:bg-zinc-900/20 disabled:opacity-50"
           >
             Consolidate
           </button>
@@ -1428,8 +1769,17 @@ function EarnCard({
 
 function Footer() {
   return (
-    <footer className="mt-auto pt-4 text-center text-[11px] text-zinc-600">
-      Particle Universal Accounts (EIP-7702) · Magic · Arbitrum
+    <footer className="mt-auto flex flex-col items-center gap-1 pt-4 text-center text-[11px] text-zinc-400">
+      <span>Particle Universal Accounts (EIP-7702) · Magic · Arbitrum</span>
+      <a
+        href={RECEIPTS_CONTRACT_URL}
+        target="_blank"
+        rel="noreferrer"
+        title={RECEIPTS_CONTRACT}
+        className="text-zinc-500 underline decoration-zinc-300 underline-offset-2 transition hover:text-indigo-600"
+      >
+        UniversalPayReceipts on Arbitrum One: {RECEIPTS_CONTRACT} ✓ verified
+      </a>
     </footer>
   );
 }

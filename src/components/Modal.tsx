@@ -29,14 +29,14 @@ export function Modal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-t-3xl border border-white/10 bg-zinc-950 p-6 shadow-2xl sm:rounded-3xl"
+        className="w-full max-w-md rounded-t-3xl border border-zinc-900/10 bg-zinc-950 p-6 shadow-2xl sm:rounded-3xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">{title}</h2>
+          <h2 className="text-lg font-semibold text-zinc-900">{title}</h2>
           <button
             onClick={onClose}
-            className="grid h-8 w-8 place-items-center rounded-full bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
+            className="grid h-8 w-8 place-items-center rounded-full bg-zinc-900/5 text-zinc-600 hover:bg-zinc-900/10 hover:text-zinc-900"
             aria-label="Close"
           >
             ✕
