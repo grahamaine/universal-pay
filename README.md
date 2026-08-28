@@ -12,6 +12,15 @@ move value across chains, all from one number.
 
 ---
 
+## 🏆 Recognition
+
+**UXMAXX Hackathon — Certificate of Participation** · Encode Club × Particle Network (The 7702 Collective) · August 2026.
+Awarded to **Graham Byagaba** for **Unify_UX**.
+
+![UXMAXX Hackathon — Certificate of Participation for Unify_UX](assets/uxmaxx-certificate.png)
+
+---
+
 ## Built for the Particle Network Universal Accounts track
 
 This app is built on **[Particle Network's Universal Accounts SDK](https://developers.particle.network/universal-accounts/cha/overview)
